@@ -2,6 +2,7 @@ var _createClass = function () { function defineProperties(target, props) { for 
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
+import * as main_scss from "../../src/sass/main.scss";
 import { setType } from "fable-core/Symbol";
 import _Symbol from "fable-core/Symbol";
 import { Tuple, compareRecords, equalsRecords, compareUnions, equalsUnions } from "fable-core/Util";
@@ -9,6 +10,7 @@ import { createElement } from "react";
 import { fold } from "fable-core/Seq";
 import { ProgramModule } from "fable-elmish/elmish";
 import { withReact } from "fable-elmish-react/react";
+export var sass = main_scss;
 export var Message = function () {
   function Message(caseName, fields) {
     _classCallCheck(this, Message);

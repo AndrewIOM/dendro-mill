@@ -53,3 +53,7 @@ index.android.map
 packages
 deploy/
 *.orig
+
+# FABLE
+temp/
+app/js/

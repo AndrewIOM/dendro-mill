@@ -6,7 +6,10 @@
 open Elmish
 open Elmish.React
 open Fable.Import
+open Fable.Core.JsInterop
 open Fable.React
+
+let sass = importAll<obj> "./sass/main.scss"
 
 // Messages
 type Message =

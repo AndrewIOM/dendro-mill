@@ -1,4 +1,5 @@
-var webpack = require('webpack');
+const webpack = require('webpack')
+const path = require('path')
 
 var config = {
   context: __dirname + '/temp/src',
@@ -15,36 +16,29 @@ var config = {
     electron: true
   },
   target: "node",
-  devtool: "source-map"
+  devtool: "source-map",
+  module: {
+    rules: [{
+      test: /\.js$/,
+      include: path.resolve(__dirname, 'src'),
+      use: [{
+        loader: 'babel-loader',
+        options: {
+          presets: [
+            ['es2015', { modules: false }]
+          ]
+        }
+      }]
+    },
+    {
+      test: /\.scss$/,
+      use: [
+        'style-loader',
+        'css-loader',
+        'sass-loader'
+      ]
+    }]
+  }
 };
 
 module.exports = config;
-
-// module.exports = {
-//   entry: {
-//     main: "temp/src/main",
-//     renderer: "temp/src/renderer"
-//   },
-//   output: {
-//     filename: "[name].js",
-//     path: path.resolve(process.cwd(), 'app/js'),
-//     libraryTarget: "commonjs2"
-//   },
-//   externals: {
-//     electron: true
-//   },
-//   target: "node",
-//   node: {
-//     __dirname: false,
-//     __filename: false
-//   },
-//   devtool: "source-map",
-//   module: {
-//     rules: [{
-//       enforce: "pre",
-//       loader: "source-map-loader",
-//       exclude: /node_modules/,
-//       test: /\.js$/
-//     }]
-//   }
-// };
