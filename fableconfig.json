@@ -1,0 +1,8 @@
+{
+    "projFile": "src/app.fsx",
+    "sourceMaps": true,
+    "outDir": "temp",
+    "scripts": {
+        "postbuild": "node node_modules/webpack/bin/webpack"
+    }
+}
