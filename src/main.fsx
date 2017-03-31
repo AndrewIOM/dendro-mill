@@ -1,16 +1,63 @@
 #r "../node_modules/fable-core/Fable.Core.dll"
+#load "johnnyfive.fsx"
 #load "../node_modules/fable-import-electron/Fable.Import.Electron.fs"
 
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 open Fable.Import.Electron
+open Fable.Import.JohnnyFive
+
+// Serial Port
+let mutable arduino: Board option = Option.None
+let mutable xAxis: Stepper option = Option.None
+let mutable yAxis: Stepper option = Option.None
+let mutable zAxis: Stepper option = Option.None
+let mutable rAxis: Stepper option = Option.None
+
+// Arduino Setup
+type PinMode =
+| Input = 0
+| Output = 1
+| Analog = 2
+| Pwm = 3
+| Servo = 4
+
+let connectArduino portAddress =
+    let board = JohnnyFive.Board(port = portAddress)
+
+    board.on("ready", unbox(fun () -> 
+        board.pinMode(13.,float PinMode.Output)
+
+        // Setup motors
+        let defaultOptions =         
+            let opt = createEmpty<StepperOption>
+            opt.rpm <- Some 200.
+            opt.direction <- Some 1.
+            opt.stepsPerRev <- 16.
+            opt
+
+        let xOption = defaultOptions
+        xOption.pins <- [1.;2.]
+
+        let yOption = defaultOptions
+        yOption.pins <- [3.;4.]
+
+        xAxis <- Some (Stepper(U3.Case3 xOption))
+        yAxis <- Some (Stepper(U3.Case3 yOption))
+        ()
+
+        ) ) |> ignore
+    arduino <- Some board
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mutable mainWindow: BrowserWindow option = Option.None
 
 let createMainWindow () =
+
+    connectArduino "someport"
+
     let options = createEmpty<BrowserWindowOptions>
     options.width <- Some 800.
     options.height <- Some 600.

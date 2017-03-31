@@ -13,9 +13,10 @@ var config = {
     libraryTarget: "commonjs2"
   },
   externals: {
-    electron: true
+    bindings: true,
+    serialport: true
   },
-  target: "node",
+  target: "electron",
   devtool: "source-map",
   module: {
     rules: [{
