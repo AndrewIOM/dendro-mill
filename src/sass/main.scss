@@ -1,5 +1,33 @@
 body {
-    font-family: Arial;
+  font-family: Arial;
+  margin: 0;
+}
+
+// Sidebar
+#sidebar {
+  position: absolute;
+  width: 155px;
+  height: 100%;
+  top: 0;
+  background-color: #f44336;
+  padding: 0 10px;
+  #sidebar-collapse {}
+  nav {
+    a {
+      display: block;
+      color: white;
+      font-weight: bold;
+      padding: 1em 0;
+      img {
+        height: 1.5em;
+      }
+    }
+  }
+}
+
+.main-section {
+  margin-left: 175px;
+  padding:0em 1em; 
 }
 
 // Cartesian Grid
@@ -17,8 +45,11 @@ path.area {
   fill: #e7e7e7;
 }
 
-.x.axis line {
-  stroke: #fff;
+.x.axis {
+  line {
+    stroke: black;
+    stroke-width: 0.2px;
+  }
 }
 
 .x.axis .minor {
