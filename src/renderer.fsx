@@ -3,7 +3,7 @@
 #r "../node_modules/fable-elmish/Fable.Elmish.dll"
 #r "../node_modules/fable-elmish-react/Fable.Elmish.React.dll"
 #load "../node_modules/fable-import-d3/Fable.Import.D3.fs"
-#load "serialport.fsx"
+#load "johnnyfive.fsx"
 
 open Elmish
 open Elmish.React
@@ -12,7 +12,51 @@ open Fable.Import.Browser
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.React
-open Fable.Import.SerialPort
+open Fable.Import.JohnnyFive
+
+// Arduino - Global variables to avoid them being disposed
+let mutable arduino: Board option = None
+let mutable xAxis: Stepper option = None
+let mutable yAxis: Stepper option = None
+let mutable zAxis: Stepper option = None
+let mutable rAxis: Stepper option = None
+
+// Arduino Setup
+type PinMode =
+| Input = 0
+| Output = 1
+| Analog = 2
+| Pwm = 3
+| Servo = 4
+
+let connectArduino () =
+    let board = JohnnyFive.Board()
+
+    board.on("ready", unbox(fun () -> 
+        board.pinMode(13.,float PinMode.Output)
+
+        // Setup motors
+        let defaultOptions =         
+            let opt = createEmpty<StepperOption>
+            opt.rpm <- Some 200.
+            opt.direction <- Some 1.
+            opt.stepsPerRev <- 16.
+            opt
+
+        let xOption = defaultOptions
+        xOption.pins <- [1.;2.]
+
+        let yOption = defaultOptions
+        yOption.pins <- [3.;4.]
+
+        xAxis <- Some (Stepper(U3.Case3 xOption))
+        yAxis <- Some (Stepper(U3.Case3 yOption))
+        ()
+
+        ) ) |> ignore
+    arduino <- Some board
+
+connectArduino()
 
 let sass = importAll<obj> "./sass/main.scss"
 let ReactFauxDOM = importAll<obj> "react-faux-dom/lib/ReactFauxDOM"  
@@ -39,7 +83,9 @@ and Motor =
 | Enabled of MotorState
 
 and MotorState = {
+    CurrentStep: int // Where motor starts and stops
     MaxStep: int
+    MinStep: int
 }
 
 and CartesianCoordinate = float * float
@@ -64,16 +110,39 @@ let init () =
      TiltB = Disabled
      Section = Control }
 
+type Axis =
+  | X
+  | Y
+  | Z
+  | R
+  | A
+  | B
 
 type Message =
+  | ConnectArduino of string
   | Calibrate
   | SwitchSection of Section
+  | Move of Axis * int
 
 let update (msg:Message) (model:Model)  =
   match msg with
+  | ConnectArduino port -> 
+      connectArduino() |> ignore
+      { model with CartesianX = Enabled { CurrentStep = 0; MaxStep = 100; MinStep = 100 } 
+                   CartesianY = Enabled { CurrentStep = 0; MaxStep = 100; MinStep = 100 } }
   | Message.Calibrate -> model
   | SwitchSection s -> { model with Section = s }
-
+  | Move (axis,steps) ->
+      match axis with
+      | X ->
+        match model.CartesianX with
+        | Disabled -> model
+        | Enabled ax -> {model with CartesianX = Enabled { ax with CurrentStep = ax.CurrentStep + steps }}
+      | Y ->
+        match model.CartesianY with
+        | Disabled -> model
+        | Enabled ax -> {model with CartesianY = Enabled { ax with CurrentStep = ax.CurrentStep + steps }}
+      | _ -> model
 
 // View
 open Fable.Core.JsInterop
@@ -86,8 +155,8 @@ let drawCartesianGrid (model:Model) : React.ReactElement =
   let width,height = 350, 350
   let margin = 10
   
-  let x = D3.Scale.Globals.linear().range([|0.;float (width - margin * 2)|]).domain([|1.;10.|])
-  let y = D3.Scale.Globals.linear().range([|float (height - margin * 2);0.|]).domain([|1.;10.|])
+  let x = D3.Scale.Globals.linear().range([|0.;float (width - margin * 2)|]).domain([|-100.;100.|])
+  let y = D3.Scale.Globals.linear().range([|float (height - margin * 2);0.|]).domain([|-100.;100.|])
   
   let xAxis = D3.Svg.Globals.axis().scale(x).tickSize(-(float (height - margin * 2)))
   let yAxis = D3.Svg.Globals.axis().scale(y).orient("right").tickSize(float (width - margin * 2))
@@ -116,11 +185,16 @@ let drawCartesianGrid (model:Model) : React.ReactElement =
     ?style("text-anchor", "end")
     |> ignore
 
-  svg.append("circle")
-    ?attr("r", 4)
-    ?attr("cx", 10)
-    ?attr("cy", 50) |> ignore
-
+  match model.CartesianX with
+  | Motor.Disabled -> ()
+  | Enabled xPos ->
+    match model.CartesianY with
+    | Motor.Disabled -> ()
+    | Enabled yPos ->
+      svg.append("circle")
+        ?attr("r", 4)
+        ?attr("cx", xPos.CurrentStep |> float |> x.Invoke)
+        ?attr("cy", yPos.CurrentStep |> float |> y.Invoke) |> ignore
 
   node?toReact() :?> React.ReactElement
 
@@ -135,9 +209,13 @@ let sidebarView model (onClick: Message -> DOMAttr) =
     ]
   ]
 
-let settingsView model =
+let settingsView dispatch model =
   R.section [ Id "settings-view"; ClassName "main-section" ] [
-    R.h1 [] [ unbox "Settings View" ]
+    R.h1 [] [ unbox "Settings" ]
+
+    R.label [] [ R.str "Arduino Port" ]
+    R.select [ OnChange (fun ev -> !!ev.target?value |> ConnectArduino |> dispatch )  ] []
+
     R.p [] [unbox "Icons designed by Alfredo Hernandez, Freepik, and SplashIcons, from Flaticon" ]
   ]
 
@@ -151,11 +229,19 @@ let calibrateView model =
     R.h1 [] [ unbox "Settings View" ]
   ]
 
-let controlView model =
+let controlView (onClick:Message->DOMAttr) model =
   R.section [ Id "control-view"; ClassName "main-section" ] [
     R.h1 [] [ unbox "Control View" ]
     R.label [] [ unbox "Cartesian grid" ]
     R.fn drawCartesianGrid model []
+    R.div [ ClassName "direction-buttons" ] [
+      R.str "Move manually..."
+      R.button [ onClick <| ConnectArduino "random-port" ] [ R.str "Connect Arduino" ]
+      R.button [ onClick <| Move (Axis.Y,1) ] [ R.str "North" ]
+      R.button [ onClick <| Move (Axis.Y,-1) ] [ R.str "South" ]
+      R.button [ onClick <| Move (Axis.X,1) ] [ R.str "East" ]
+      R.button [ onClick <| Move (Axis.X,-1) ] [ R.str "West" ]
+    ]
   ]
 
 
@@ -166,9 +252,9 @@ let view (model:Model) dispatch =
     let sectionView =
       match model.Section with
       | Section.Calibrate -> calibrateView
-      | Section.Control -> controlView
+      | Section.Control -> controlView onClick
       | Section.Paths -> pathsView
-      | Section.Settings -> settingsView
+      | Section.Settings -> settingsView dispatch
 
     R.div [] [
       sidebarView model onClick
