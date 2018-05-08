@@ -15,7 +15,7 @@ open Types
 let patchProcessStdin : unit -> unit = import "patchProcessStdin" "./electron-patch.js"
 patchProcessStdin()
 
-//let micromill = Micromill.connect()
+// let micromill = Micromill.connect()
 
 //////////////////////
 /// Messages + Router

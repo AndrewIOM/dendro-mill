@@ -135,8 +135,8 @@ let controlView (onClick:Message->DOMAttr) (model:ViewState) =
     R.section [ Id "control-view"; ClassName "main-section" ] [
       R.h1 [] [ unbox "Control View" ]
       R.label [] [ unbox "Cartesian grid" ]
-      R.fn drawCartesianGrid model []
-      R.fn drawVerticalAxis model []
+      R.ofFunction drawCartesianGrid model []
+      R.ofFunction drawVerticalAxis model []
       R.div [ ClassName "direction-buttons" ] [
         R.str "Move manually..."
         R.button [ onClick <| Move (Axis.Y,1<step>) ] [ R.str "North" ]

@@ -1,10 +1,9 @@
 module Main
 
-open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 open Fable.Import.Electron
-open Node.Exports
+open Fable.Import.Node.Exports
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
@@ -19,13 +18,12 @@ let createMainWindow () =
 
     // Load the index.html of the app.
     let opts = createEmpty<Node.Url.Url<obj>>
-    opts.pathname <- Some <| Path.join(Node.Globals.__dirname, "index.html")
+    opts.pathname <- Some <| path.join(Node.Globals.__dirname, "index.html")
     opts.protocol <- Some "file:"
-    window.loadURL(Url.format(opts))
-
+    window.loadURL(url.format(opts))
 
     #if DEBUG
-    Fs.watch(Path.join(Node.Globals.__dirname, "renderer.js"), fun _ _ ->
+    fs.watch(path.join(Node.Globals.__dirname, "renderer.js"), fun _ _ ->
         window.webContents.reloadIgnoringCache()
     ) |> ignore
     #endif

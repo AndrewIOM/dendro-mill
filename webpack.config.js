@@ -15,6 +15,7 @@ var isProduction = process.argv.indexOf("-p") >= 0;
 console.log("Bundling for " + (isProduction ? "production" : "development") + "...");
 
 var basicConfig = {
+  mode: isProduction ? "production" : "development",
   devtool: "source-map",
   resolve: {
     modules: [resolve("./node_modules/")]
@@ -23,7 +24,7 @@ var basicConfig = {
     __dirname: false,
     __filename: false
   },
-  target: "electron",  
+  target: "electron-main",  
   externals: {
     bindings: true,
     serialport: true
