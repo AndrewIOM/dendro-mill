@@ -1,31 +1,32 @@
-#r "../node_modules/fable-core/Fable.Core.dll"
-#load "../node_modules/fable-import-electron/Fable.Import.Electron.fs"
+module Main
 
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 open Fable.Import.Electron
+open Node.Exports
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mutable mainWindow: BrowserWindow option = Option.None
 
 let createMainWindow () =
-
     let options = createEmpty<BrowserWindowOptions>
     options.width <- Some 800.
     options.height <- Some 600.
+    options.autoHideMenuBar <- Some true
     let window = electron.BrowserWindow.Create(options)
 
     // Load the index.html of the app.
-    let opts = createEmpty<Node.url_types.UrlOptions>
-    opts.pathname <- Some <| Node.path.join(__SOURCE_DIRECTORY__,  "../app/index.html")
+    let opts = createEmpty<Node.Url.Url<obj>>
+    opts.pathname <- Some <| Path.join(Node.Globals.__dirname, "index.html")
     opts.protocol <- Some "file:"
-    window.loadURL(Node.url.format(opts))
+    window.loadURL(Url.format(opts))
+
 
     #if DEBUG
-    fs.watch(Node.path.join(Node.__dirname, "renderer.js"), fun _ ->
-        window.webContents.reloadIgnoringCache() |> ignore
+    Fs.watch(Path.join(Node.Globals.__dirname, "renderer.js"), fun _ _ ->
+        window.webContents.reloadIgnoringCache()
     ) |> ignore
     #endif
 
@@ -41,19 +42,19 @@ let createMainWindow () =
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
-electron.app.on("ready", unbox createMainWindow)
+electron.app.on("ready", unbox createMainWindow) |> ignore
 
 // Quit when all windows are closed.
 electron.app.on("window-all-closed", unbox(fun () ->
     // On OS X it is common for applications and their menu bar
     // to stay active until the user quits explicitly with Cmd + Q
-    if Node.``process``.platform <> "darwin" then
+    if Node.Globals.``process``.platform <> Node.Base.NodeJS.Darwin then
         electron.app.quit()
-))
+)) |> ignore
 
 electron.app.on("activate", unbox(fun () ->
     // On OS X it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if mainWindow.IsNone then
         createMainWindow()
-))
+)) |> ignore

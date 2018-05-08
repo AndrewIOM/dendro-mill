@@ -1,7 +1,5 @@
 namespace Fable.Import
 
-#r "../node_modules/fable-core/Fable.Core.dll"
-
 open System
 open System.Text.RegularExpressions
 open Fable.Core

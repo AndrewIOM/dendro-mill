@@ -57,3 +57,5 @@ deploy/
 # FABLE
 temp/
 app/js/
+app/*.js
+app/*.js.map

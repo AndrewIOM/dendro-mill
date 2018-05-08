@@ -1,45 +1,87 @@
-const webpack = require('webpack')
-const path = require('path')
+var path = require("path");
+var webpack = require("webpack");
+var fableUtils = require("fable-utils");
+ 
+function resolve(relativePath) {
+    return path.join(__dirname, relativePath);
+}
+ 
+var babelOptions = fableUtils.resolveBabelOptions({
+  presets: [["es2015", { "modules": false }]],
+  plugins: ["transform-runtime"]
+});
 
-var config = {
-  context: __dirname + '/temp/src',
-  entry: {
-    renderer: './renderer.js',
-    main: './main.js'
+var isProduction = process.argv.indexOf("-p") >= 0;
+console.log("Bundling for " + (isProduction ? "production" : "development") + "...");
+
+var basicConfig = {
+  devtool: "source-map",
+  resolve: {
+    modules: [resolve("./node_modules/")]
   },
-  output: {
-    path: __dirname + '/app/js',
-    filename: '[name].bundle.js',
-    libraryTarget: "commonjs2"
+  node: {
+    __dirname: false,
+    __filename: false
   },
+  target: "electron",  
   externals: {
     bindings: true,
     serialport: true
   },
-  target: "electron",
-  devtool: "source-map",
   module: {
-    rules: [{
-      test: /\.js$/,
-      include: path.resolve(__dirname, 'src'),
-      use: [{
-        loader: 'babel-loader',
-        options: {
-          presets: [
-            ['es2015', { modules: false }]
-          ]
+    rules: [
+      {
+        test: /\.fs(x|proj)?$/,
+        use: {
+          loader: "fable-loader",
+          options: {
+            babel: babelOptions,
+            define: isProduction ? [] : ["DEBUG"]
+          }
         }
-      }]
-    },
-    {
-      test: /\.scss$/,
-      use: [
-        'style-loader',
-        'css-loader',
-        'sass-loader'
-      ]
-    }]
+      },
+      {
+        test: /\.js$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: babelOptions
+        },
+      },
+      {
+        test: /\.scss$/,
+        use: [
+          'style-loader',
+          'css-loader',
+          'sass-loader'
+        ]
+      },
+      {
+        test: /\.css$/,
+        use: [ 'style-loader', 'css-loader' ]
+      }
+    ]
   }
 };
 
-module.exports = config;
+var mainConfig = Object.assign({
+  target: "electron-main",
+  entry: resolve("src/Main/Main.fsproj"),
+  output: {
+    path: resolve("app"),
+    filename: "main.js",
+    libraryTarget: "commonjs2"
+  }
+}, basicConfig);
+
+var rendererConfig = Object.assign({
+  target: "electron-renderer",
+  entry: resolve("src/Renderer/Renderer.fsproj"),
+  output: {
+    path: resolve("app"),
+    filename: "renderer.js",
+    libraryTarget: "commonjs2"
+  }
+}, basicConfig);
+
+module.exports = [mainConfig, rendererConfig]
