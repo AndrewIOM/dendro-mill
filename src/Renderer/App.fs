@@ -5,8 +5,10 @@ open Elmish.React
 open ViewState
 
 let init () =
-    { Hardware = Hardware.init()
-      Software = Software.init() }, Cmd.none
+    let hardware = Hardware.init()
+    let software = Software.init()
+    { Hardware = fst hardware
+      Software = fst software }, List.concat [snd hardware |> Cmd.map HardwareMsg; snd software |> Cmd.map SoftwareMsg]
 
 let update (msg:AppMsg) (model:AppModel) : AppModel * Cmd<AppMsg> =
     match msg with

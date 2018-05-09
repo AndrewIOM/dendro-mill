@@ -6,6 +6,7 @@ open Fable.Import
 open Fable.Import.JohnnyFive
 open Fable.PowerPack
 open Types
+open Fable.Import.JS
 
 [<Measure>] type pin
 
@@ -156,15 +157,23 @@ module MovingStage =
             | Rotation -> Axis.tilting rTotalSteps None (setupMotor rPins board |> Stepper.toMoveAction) |> Axis.Tilt
             | StageAngle -> Axis.tilting abTotalSteps None (setupMotor abPins board |> Stepper.toMoveAction) |> Axis.Tilt
 
+    let private boardReady (board:JohnnyFive.Board) =
+        Fable.PowerPack.Promise.create(fun res rej -> 
+            board.on_ready(fun () ->
+                printfn "The board is ready"
+                let status = 
+                    {
+                        X = board |> activateAxis X
+                        Y = board |> activateAxis Y
+                        Vertical = board |> activateAxis Vertical
+                        Tilt = board |> activateAxis StageAngle
+                    } |> Connected
+                res status ) |> ignore )
+
     let connect () =
-        let board = JohnnyFive.Board()
-        // Locking the thread is not the best option here, but required until a clean 
-        // method of handling the on_ready event is located.
-        while not board.isReady do 
-            promise { do! Promise.sleep 500 } |> Promise.start
-        {
-            X = board |> activateAxis X
-            Y = board |> activateAxis Y
-            Vertical = board |> activateAxis Vertical
-            Tilt = board |> activateAxis StageAngle
-        } |> Connected
+        promise {
+            printfn "Connecting..."
+            let board = JohnnyFive.Board()
+            let! status = boardReady board 
+            return status
+        }

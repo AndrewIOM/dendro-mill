@@ -38,10 +38,10 @@ let drawVerticalAxis model : React.ReactElement =
     let svg = D3.Globals.select(node)
 
     svg.append("rect")
-       ?attr("class", "z axis")
-       ?attr("height", height)
-       ?attr("width", width)
-       |> ignore
+        ?attr("class", "z axis")
+        ?attr("height", height)
+        ?attr("width", width)
+        |> ignore
 
     node?toReact() :?> React.ReactElement
 
@@ -110,13 +110,24 @@ let drawCartesianGrid (state:AppModel) : React.ReactElement =
 
 let sidebarView (model:AppModel) onClick =
     R.section [ Id "sidebar" ] [
-      R.button [ Id "sidebar-collapse" ] []
-      R.nav [] [
-        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Control) ] [ R.img [ Src "icons/control-section.svg" ] ; unbox "Control" ]
-        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Calibrate) ] [ R.img [ Src "icons/calibrate-section.svg" ] ; unbox "Calibrate" ]
-        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Paths) ] [ R.img [ Src "icons/paths-section.svg" ] ; unbox "Paths" ]
-        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Settings) ] [ R.img [ Src "icons/settings-section.svg" ] ; unbox "Settings" ]
-      ]
+        R.button [ Id "sidebar-collapse" ] []
+        R.nav [] [
+            R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Control) ] [ R.img [ Src "icons/control-section.svg" ] ; unbox "Control" ]
+            R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Calibrate) ] [ R.img [ Src "icons/calibrate-section.svg" ] ; unbox "Calibrate" ]
+            R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Paths) ] [ R.img [ Src "icons/paths-section.svg" ] ; unbox "Paths" ]
+            R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Settings) ] [ R.img [ Src "icons/settings-section.svg" ] ; unbox "Settings" ]
+        ]
+    ]
+
+let statusBar (model:AppModel) =
+    let statusText = 
+        match model.Hardware with
+        | Hardware.Model.NotConnected -> "Not Connected"
+        | Hardware.Model.Connecting -> "Connecting"
+        | Hardware.Model.Online _ -> "Micromill Online"
+        | Hardware.Model.Offline error -> sprintf "Micromill Offline (Error: %s)" error
+    R.div [ Class "status-bar" ] [
+      R.span [] [ unbox statusText ]
     ]
 
 let settingsView onClick model =
@@ -173,4 +184,5 @@ let master (model:AppModel) dispatch =
 
     R.div [] [
       sidebarView model onClick
+      statusBar model
       sectionView model ]

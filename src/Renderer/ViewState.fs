@@ -3,6 +3,7 @@ module ViewState
 open Elmish
 open Fable.Core.JsInterop
 open Fable.Import
+open Fable.PowerPack
 open Types
 
 let patchProcessStdin : unit -> unit = import "patchProcessStdin" "./electron-patch.js"
@@ -23,9 +24,31 @@ module Hardware =
     | FinishedMoving of MovementDirection * float<mm>
 
     [<Fable.Core.PojoAttribute>]
-    type Model = {
-      X: float<mm>
+    type Model = 
+    | NotConnected
+    | Connecting
+    | Online of ModelState
+    | Offline of string
+
+    and ModelState = {
+        X: float<mm>
+        Y: float<mm>
+        Vertical: float<mm>
+        Tilt: float<degree>
     }
+
+    let connectArduino (dispatch:Dispatch<Msg>) =
+        movingStage <- MovingStage.Status.Connecting
+        let success s = 
+            movingStage <- s
+            dispatch ConnectionEstablished
+        promise {
+            let! stage = MovingStage.connect()
+            success stage |> ignore
+        } |> Promise.start
+
+    let connected =
+        Online { X = 0.<mm>; Y = 0.<mm>; Vertical = 0.<mm>; Tilt = 0.<degree> }
 
     let beginMove steps (dispatch:Dispatch<Msg>) =
         let callback = fun () -> dispatch (FinishedMoving (MovementDirection.X, 100.<mm>))
@@ -34,13 +57,22 @@ module Hardware =
         | _ -> ()
 
     let endMove direction distance model =
-        { model with X = model.X + distance }
+        match model with
+        | Online s ->
+            match direction with
+            | X -> Online { s with X = s.X + distance }
+            | _ -> model
+        | _ -> model
 
     let init () =
-        { X = 0.<mm> }
+        NotConnected, Cmd.ofMsg EstablishConnection
 
     let update msg model =
         match msg with
+        | EstablishConnection -> 
+            Connecting, Cmd.ofSub connectArduino
+        | ConnectionEstablished ->
+            connected, Cmd.none
         | StartMoving (direction,distance) ->
             model, Cmd.ofSub (beginMove 100<step>)
         | FinishedMoving (direction,distance) ->
@@ -82,33 +114,17 @@ module Software =
     | Move of MovementDirection * int<step>
 
     let init () =
-      // Try to connect micromill on init?
          { Calibration = Calibration.Uncalibrated
-           Section = Control }
+           Section = Control }, Cmd.none
 
     let activateMotors state = 
-      // match movingStage with
-      // | Disconnected -> invalidOp "Arduino not connected"
-      // | Connected c ->
-      //     match c.Arduino.isReady with
-      //     | false -> state
-      //     | true ->
-      //       let x = MovingStage.activateAxis MovementDirection.X c.Arduino
-      //       let y = MovingStage.activateAxis MovementDirection.Y c.Arduino
-      //       let z = MovingStage.activateAxis MovementDirection.Vertical c.Arduino
-      //       let mm = Connected { 
-      //                 c with 
-      //                   CartesianX = Enabled { Motor = x; CurrentStep = 0<step>; MaxStep = 20000<step>; MinStep = 20000<step> }
-      //                   CartesianY = Enabled { Motor = y; CurrentStep = 0<step>; MaxStep = 20000<step>; MinStep = 20000<step> } 
-      //                   Vertical = Enabled { Motor = z; CurrentStep = 0<step>; MaxStep = 20000<step>; MinStep = 20000<step> } 
-      //                 }
-            state
+        state
 
     let connect state =
-      state
+        state
 
     let calibrate state =
-      state
+        state
 
     let uploadImage image state =
         Browser.console.log "file selected!" |> ignore
@@ -135,13 +151,13 @@ module Software =
 
     let update (msg:Msg) (state:Model)  =
       match msg with
-      | ConnectArduino -> connect state
-      | ActivateAxes -> activateMotors state
-      | Msg.Calibrate -> calibrate state
-      | SwitchSection s -> { state with Section = s }
-      | Move (axis,steps) -> move axis steps state
-      | UploadCalibrationImage imageDataUrl -> uploadImage imageDataUrl state
-      , Cmd.none
+      | ConnectArduino -> connect state, Cmd.none
+      | ActivateAxes -> activateMotors state, Cmd.none
+      | Msg.Calibrate -> calibrate state, Cmd.none
+      | SwitchSection s -> { state with Section = s }, Cmd.none
+      | Move (axis,steps) -> move axis steps state, Cmd.none
+      | UploadCalibrationImage imageDataUrl -> uploadImage imageDataUrl state, Cmd.none
+
 
 //////////////
 /// App State
