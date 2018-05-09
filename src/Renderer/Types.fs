@@ -1,7 +1,5 @@
 module Types
 
-open Fable.Import
-
 ///////////////////
 /// Moving Stage
 ///////////////////
@@ -10,117 +8,60 @@ open Fable.Import
 [<Measure>] type step
 [<Measure>] type degree
 [<Measure>] type micrometre
+[<Measure>] type rpm
 
-/// Representation of an axis on a moving stage
-module Axis =
+type Coordinate = float * float
 
-    type CurrentStep =
-    | Uncalibrated
-    | Calibrated of int<step>
-
-    type private Axis = {
-        Step: CurrentStep
-        StepLimit: int<step>
-    }
-    
-    type LinearAxis = private LinearAxis of Axis
-    type TiltAxis = private TiltAxis of Axis
-
-    /// Create a linear axis
-    let linear maxSteps startingPosition =
-        match startingPosition with
-        | None -> LinearAxis { Step = Uncalibrated; StepLimit = maxSteps }
-        | Some s -> LinearAxis { Step = Calibrated s; StepLimit = maxSteps }
-
-    /// Create a tilting axis
-    let tilting maxSteps startingStep =
-        match startingStep with
-        | None -> TiltAxis { Step = Uncalibrated; StepLimit = maxSteps }
-        | Some s -> TiltAxis { Step = Calibrated s; StepLimit = maxSteps }
-
-    let angle (t:TiltAxis) (lengthToPivot:float<micrometre>) : float<degree> =
-        2.214<degree>
-        // TODO triangle calculation
-
-module Stage =
-
-    open Axis
-
-    type Stage = {
-        Tilt: TiltAxis list
-        Linear: LinearAxis list
-    }
-
-    let x = 2
-
-
-///////////////////
-/// View Model
-///////////////////
-
-type Micromill =
-| Disconnected
-| Connected of MicromillState
-
-and MicromillState = {
-    Arduino: JohnnyFive.Board
-    CartesianX: Motor
-    CartesianY: Motor
-    CartesianCalibration: Calibration
-    Rotation: Motor
-    Vertical: Motor
-    TiltA: Motor
-    TiltB: Motor
-}
-
-and Motor = 
-| Disabled
-| Enabled of MotorState
-
-and MotorState = {
-    CurrentStep: int<step>
-    MaxStep: int<step>
-    MinStep: int<step>
-    Motor: JohnnyFive.Stepper
-}
-
-and CartesianCoordinate = float * float
-
-and Calibration = 
-| Uncalibrated
-| ImageOnly of string //base64 or blob
-| Calibrated of CalibrationState
-
-and CalibrationState = {
-    Image: string
-    TopRight: CartesianCoordinate
-    TopLeft: CartesianCoordinate
-    BottomRight: CartesianCoordinate
-    BottomLeft: CartesianCoordinate }
-
-type Axis =
+type MovementDirection =
 | X
 | Y
 | Vertical
 | Rotation
 | StageAngle
 
-type ViewSection =
-| Control
-| Calibrate
-| Paths
-| Settings
+/// Representation of an axis on a moving stage
+module Axis =
 
-[<Fable.Core.PojoAttribute>]
-type ViewState = {
-    Micromill: Micromill
-    Calibration: Calibration
-    Section: ViewSection }
+    type MoveMotor = int<step> -> (unit -> unit) -> unit
 
-type Message =
-| ConnectArduino
-| ActivateAxes
-| UploadCalibrationImage of string
-| Calibrate
-| SwitchSection of ViewSection
-| Move of Axis * int<step>
+    type CurrentStep =
+    | Uncalibrated
+    | Calibrated of int<step>
+
+    type private AxisState = {
+        Step: CurrentStep
+        StepLimit: int<step>
+        Move: MoveMotor
+    }
+    
+    type LinearAxis = private LinearAxis of AxisState
+    type TiltAxis = private TiltAxis of AxisState
+
+    type Axis =
+    | Linear of LinearAxis
+    | Tilt of TiltAxis
+
+    /// Create a linear axis
+    let linear maxSteps startingPosition move =
+        match startingPosition with
+        | None -> LinearAxis { Step = Uncalibrated; StepLimit = maxSteps; Move = move }
+        | Some s -> LinearAxis { Step = Calibrated s; StepLimit = maxSteps; Move = move }
+
+    /// Create a tilting axis
+    let tilting maxSteps startingStep move =
+        match startingStep with
+        | None -> TiltAxis { Step = Uncalibrated; StepLimit = maxSteps; Move = move }
+        | Some s -> TiltAxis { Step = Calibrated s; StepLimit = maxSteps; Move = move }
+
+    let private unwrapLinear (LinearAxis l) = l
+    let private unwrapTilt (TiltAxis t) = t
+
+    let currentStep axis =
+        match axis with
+        | Linear l -> (l |> unwrapLinear).Step
+        | Tilt l -> (l |> unwrapTilt).Step
+
+    let move axis =
+        match axis with
+        | Linear l -> (l |> unwrapLinear).Move
+        | Tilt l -> (l |> unwrapTilt).Move

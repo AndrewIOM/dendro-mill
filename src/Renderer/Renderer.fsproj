@@ -6,11 +6,13 @@
     <Compile Include="../../node_modules/fable-import-d3/Fable.Import.D3.fs" />
     <Compile Include="Bindings.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="Movement.fs" />
+    <Compile Include="Templating.fs" />
     <Compile Include="Arduino.fs" />
     <Compile Include="Config.fs" />
-    <Compile Include="Calibration.fs" />
+    <Compile Include="ViewState.fs" />
     <Compile Include="View.fs" />
-    <Compile Include="Renderer.fs" />
+    <Compile Include="App.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

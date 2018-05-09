@@ -3,13 +3,23 @@ module View
 open Fable.Core.JsInterop
 open Fable.Helpers.React.Props
 open Fable.Import
+open ViewState
 open Types
 
 module R = Fable.Helpers.React
 
-let sass = importAll<obj> "../Styles/main.scss"
-let ReactFauxDOM = importAll<obj> "react-faux-dom/lib/ReactFauxDOM"  
+/////////////////////////
+/// View Styling
+/////////////////////////
 
+let sass = importAll<obj> "../Styles/main.scss"
+
+
+/////////////////////////
+/// View Components
+/////////////////////////
+
+let ReactFauxDOM = importAll<obj> "react-faux-dom/lib/ReactFauxDOM"  
 
 let drawVerticalAxis model : React.ReactElement =
 
@@ -37,7 +47,7 @@ let drawVerticalAxis model : React.ReactElement =
 
 
 
-let drawCartesianGrid (state:ViewState) : React.ReactElement =
+let drawCartesianGrid (state:AppModel) : React.ReactElement =
 
     let width,height = 350, 350
     let margin = 25
@@ -82,38 +92,37 @@ let drawCartesianGrid (state:ViewState) : React.ReactElement =
 
     Config.controlPoints |> List.map (fun (x,y) -> drawControlPoint x y) |> ignore
 
-    match state.Micromill with
-    | Disconnected -> ()
-    | Connected s ->
-      match s.CartesianX with
-      | Motor.Disabled -> ()
-      | Enabled xPos ->
-        match s.CartesianY with
-        | Motor.Disabled -> ()
-        | Enabled yPos ->
-          svg.append("circle")
-            ?attr("r", 4)
-            ?attr("cx", xPos.CurrentStep |> float |> x.Invoke)
-            ?attr("cy", yPos.CurrentStep |> float |> y.Invoke) |> ignore
+    // match state.Stage with
+    // | Disconnected -> ()
+    // | Connected s ->
+    //   match s.CartesianX with
+    //   | Motor.Disabled -> ()
+    //   | Enabled xPos ->
+    //     match s.CartesianY with
+    //     | Motor.Disabled -> ()
+    //     | Enabled yPos ->
+    //       svg.append("circle")
+    //         ?attr("r", 4)
+    //         ?attr("cx", xPos.CurrentStep |> float |> x.Invoke)
+    //         ?attr("cy", yPos.CurrentStep |> float |> y.Invoke) |> ignore
 
     node?toReact() :?> React.ReactElement
 
-let sidebarView model (onClick: Message -> DOMAttr) =
+let sidebarView (model:AppModel) onClick =
     R.section [ Id "sidebar" ] [
       R.button [ Id "sidebar-collapse" ] []
       R.nav [] [
-        R.a [ onClick <| SwitchSection Control ] [ R.img [ Src "icons/control-section.svg" ] ; unbox "Control" ]
-        R.a [ onClick <| SwitchSection ViewSection.Calibrate ] [ R.img [ Src "icons/calibrate-section.svg" ] ; unbox "Calibrate" ]
-        R.a [ onClick <| SwitchSection Paths ] [ R.img [ Src "icons/paths-section.svg" ] ; unbox "Paths" ]
-        R.a [ onClick <| SwitchSection Settings ] [ R.img [ Src "icons/settings-section.svg" ] ; unbox "Settings" ]
+        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Control) ] [ R.img [ Src "icons/control-section.svg" ] ; unbox "Control" ]
+        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Calibrate) ] [ R.img [ Src "icons/calibrate-section.svg" ] ; unbox "Calibrate" ]
+        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Paths) ] [ R.img [ Src "icons/paths-section.svg" ] ; unbox "Paths" ]
+        R.a [ onClick <| SoftwareMsg (Software.SwitchSection Software.ViewSection.Settings) ] [ R.img [ Src "icons/settings-section.svg" ] ; unbox "Settings" ]
       ]
     ]
 
 let settingsView onClick model =
     R.section [ Id "settings-view"; ClassName "main-section" ] [
       R.h1 [] [ unbox "Settings" ]
-      R.button [ onClick <| ConnectArduino ] [ R.str "Connect Arduino" ]
-      R.button [ onClick <| ActivateAxes ] [ R.str "Activate Axes" ]
+      R.button [ onClick <| HardwareMsg Hardware.EstablishConnection ] [ R.str "Connect Arduino" ]
       R.p [] [unbox "Icons designed by Alfredo Hernandez, Freepik, and SplashIcons, from Flaticon" ]
     ]
 
@@ -127,11 +136,11 @@ let calibrateView dispatch model =
       R.h1 [] [ unbox "Calibrate" ]
       R.p [] [ R.str "After your sample is fixed in position, take a top-down image of the drill stage surface. You can then calibrate it here." ]
       R.input [ Type "file"; OnChange (fun x -> 
-        UploadCalibrationImage (x.currentTarget?files[0] :?> string) |> dispatch)  ]
+        Software.UploadCalibrationImage (x.currentTarget?files[0] :?> string) |> SoftwareMsg |> dispatch)  ]
       R.canvas [ Id "calibration-canvas" ] []
     ]
 
-let controlView (onClick:Message->DOMAttr) (model:ViewState) =
+let controlView (onClick:AppMsg->DOMAttr) (model:AppModel) =
     R.section [ Id "control-view"; ClassName "main-section" ] [
       R.h1 [] [ unbox "Control View" ]
       R.label [] [ unbox "Cartesian grid" ]
@@ -139,26 +148,29 @@ let controlView (onClick:Message->DOMAttr) (model:ViewState) =
       R.ofFunction drawVerticalAxis model []
       R.div [ ClassName "direction-buttons" ] [
         R.str "Move manually..."
-        R.button [ onClick <| Move (Axis.Y,1<step>) ] [ R.str "North" ]
-        R.button [ onClick <| Move (Axis.Y,-1<step>) ] [ R.str "South" ]
-        R.button [ onClick <| Move (Axis.X,1<step>) ] [ R.str "East" ]
-        R.button [ onClick <| Move (Axis.X,-1<step>) ] [ R.str "West" ]
+        R.button [ onClick <| HardwareMsg (Hardware.StartMoving (MovementDirection.Y,1.<mm>)) ] [ R.str "North" ]
+        R.button [ onClick <| HardwareMsg (Hardware.StartMoving (MovementDirection.Y,-1.<mm>)) ] [ R.str "South" ]
+        R.button [ onClick <| HardwareMsg (Hardware.StartMoving (MovementDirection.X,1.<mm>)) ] [ R.str "East" ]
+        R.button [ onClick <| HardwareMsg (Hardware.StartMoving (MovementDirection.X,-1.<mm>)) ] [ R.str "West" ]
       ]
     ]
 
 
-let view (model:ViewState) dispatch =
-    let onClick msg =
+/////////////
+/// Layouts
+/////////////
+
+let master (model:AppModel) dispatch =
+    let onClick (msg:AppMsg) =
         OnClick <| fun _ -> msg |> dispatch
 
     let sectionView =
-        match model.Section with
-        | ViewSection.Calibrate -> calibrateView dispatch
-        | ViewSection.Control -> controlView onClick
-        | ViewSection.Paths -> pathsView
-        | ViewSection.Settings -> settingsView onClick
+        match model.Software.Section with
+        | Software.ViewSection.Calibrate -> calibrateView dispatch
+        | Software.ViewSection.Control -> controlView onClick
+        | Software.ViewSection.Paths -> pathsView
+        | Software.ViewSection.Settings -> settingsView onClick
 
     R.div [] [
       sidebarView model onClick
-      sectionView model
-      ]
+      sectionView model ]

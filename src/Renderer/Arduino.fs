@@ -4,6 +4,10 @@ open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
 open Fable.Import.JohnnyFive
+open Fable.PowerPack
+open Types
+
+[<Measure>] type pin
 
 type PinMode =
 | Input = 0
@@ -13,18 +17,14 @@ type PinMode =
 | Servo = 4
 
 type DRV8825 = {
-    Dir:        int
-    Step:       int
-    Sleep:      int
-    Reset:      int
-    Mode0:      int
-    Mode1:      int
-    Mode2:      int
-    Enabled:    int
-}
-
-type LimiterSwitch = {
-    Active: int
+    Dir:        int<pin>
+    Step:       int<pin>
+    Sleep:      int<pin>
+    Reset:      int<pin>
+    Mode0:      int<pin>
+    Mode1:      int<pin>
+    Mode2:      int<pin>
+    Enabled:    int<pin>
 }
 
 /////////////////////
@@ -32,76 +32,98 @@ type LimiterSwitch = {
 /////////////////////
 
 let xPins = {
-    Dir         = 30
-    Step        = 32
-    Sleep       = 34
-    Reset       = 36
-    Mode0       = 33
-    Mode1       = 35
-    Mode2       = 37
-    Enabled     = 31
+    Dir         = 30<pin>
+    Step        = 32<pin>
+    Sleep       = 34<pin>
+    Reset       = 36<pin>
+    Mode0       = 33<pin>
+    Mode1       = 35<pin>
+    Mode2       = 37<pin>
+    Enabled     = 31<pin>
 }
 
 let yPins = {
-    Dir         = 22
-    Step        = 24
-    Sleep       = 26
-    Reset       = 28
-    Mode0       = 25
-    Mode1       = 27
-    Mode2       = 29
-    Enabled     = 23
+    Dir         = 22<pin>
+    Step        = 24<pin>
+    Sleep       = 26<pin>
+    Reset       = 28<pin>
+    Mode0       = 25<pin>
+    Mode1       = 27<pin>
+    Mode2       = 29<pin>
+    Enabled     = 23<pin>
 }
 let zPins = {
-    Dir         = 3
-    Step        = 4
-    Sleep       = 5
-    Reset       = 6
-    Mode0       = 9
-    Mode1       = 8
-    Mode2       = 7
-    Enabled     = 10
+    Dir         = 3<pin>    
+    Step        = 4<pin>    
+    Sleep       = 5<pin>    
+    Reset       = 6<pin>    
+    Mode0       = 9<pin>
+    Mode1       = 8<pin>    
+    Mode2       = 7<pin>    
+    Enabled     = 10<pin>
 }
 let rPins = {
-    Dir         = 38
-    Step        = 40
-    Sleep       = 42
-    Reset       = 44
-    Mode0       = 41
-    Mode1       = 43
-    Mode2       = 45
-    Enabled     = 39
+    Dir         = 38<pin>
+    Step        = 40<pin>
+    Sleep       = 42<pin>
+    Reset       = 44<pin>
+    Mode0       = 41<pin>
+    Mode1       = 43<pin>
+    Mode2       = 45<pin>
+    Enabled     = 39<pin>
 }
 let abPins = {
-    Dir         = 46
-    Step        = 48
-    Sleep       = 50
-    Reset       = 52
-    Mode0       = 49
-    Mode1       = 51
-    Mode2       = 53
-    Enabled     = 47
+    Dir         = 46<pin>
+    Step        = 48<pin>
+    Sleep       = 50<pin>
+    Reset       = 52<pin>
+    Mode0       = 49<pin>
+    Mode1       = 51<pin>
+    Mode2       = 53<pin>
+    Enabled     = 47<pin>
 }
+
+let xTotalSteps = 1000<step>
+let yTotalSteps = 1000<step>
+let zTotalSteps = 1000<step>
+let rTotalSteps = 400<step>
+let abTotalSteps = 500<step>
+
 
 /////////////////////
 /// Micromill Interface
 /////////////////////
 
+module Stepper =
+
+    let private removeUnit (x:int<_>) =
+        int x
+
+    let toMoveAction (stepper:Stepper) : Axis.MoveMotor =
+        fun (steps:int<step>) (callback:unit->unit) ->
+            stepper.step(
+                createObj [ 
+                    "steps" ==> (steps |> removeUnit)
+                    "direction" ==> 1 //Clockwise (0 is counter-clockwise)
+                ], System.Func<unit,unit> callback )
+
+
 module MovingStage =
 
-    open Types
-
-    type State =
+    type Status =
     | Disconnected
     | Connecting
-    | Connected of MicromillState
+    | Connected of StageState
 
-    and MicromillState = {
-        X: Axis.LinearAxis
-        Y: Axis.LinearAxis
-        Vertical: Axis.LinearAxis
-        Tilt: Axis.TiltAxis
+    and StageState = {
+        X: Axis.Axis
+        Y: Axis.Axis
+        Vertical: Axis.Axis
+        Tilt: Axis.Axis
     }
+
+    let private unPin (pin:int<pin>) =
+        int pin
 
     let private activatePin (pin:int) (board:Board) =
         board.digitalWrite(float pin,1.)
@@ -119,8 +141,8 @@ module MovingStage =
             opt.stepsPerRev <- 200.
             opt.pins <- createObj [ "step" ==> step; "dir" ==> dir ]
             opt
-        board |> activateSleepAndReset pinConfig.Sleep pinConfig.Reset
-        let opts = motorOptions pinConfig.Step pinConfig.Dir
+        board |> activateSleepAndReset (pinConfig.Sleep |> unPin) (pinConfig.Reset |> unPin)
+        let opts = motorOptions (pinConfig.Step |> unPin) (pinConfig.Dir |> unPin)
         U3.Case3 opts |> Stepper
 
     let activateAxis axis (board:Board) =
@@ -128,13 +150,21 @@ module MovingStage =
         | false -> invalidOp "Board not ready yet"
         | true ->
             match axis with
-            | X -> setupMotor xPins board
-            | Y -> setupMotor yPins board
-            | Vertical -> setupMotor zPins board
-            | Rotation -> setupMotor rPins board
-            | StageAngle -> setupMotor abPins board
+            | X -> Axis.linear xTotalSteps None (setupMotor xPins board |> Stepper.toMoveAction) |> Axis.Linear
+            | Y -> Axis.linear yTotalSteps None (setupMotor yPins board |> Stepper.toMoveAction) |> Axis.Linear
+            | Vertical -> Axis.linear zTotalSteps None (setupMotor zPins board |> Stepper.toMoveAction) |> Axis.Linear
+            | Rotation -> Axis.tilting rTotalSteps None (setupMotor rPins board |> Stepper.toMoveAction) |> Axis.Tilt
+            | StageAngle -> Axis.tilting abTotalSteps None (setupMotor abPins board |> Stepper.toMoveAction) |> Axis.Tilt
 
-    let connect() =
+    let connect () =
         let board = JohnnyFive.Board()
-        // board.on("ready", fun () -> board |> setupMotors) |> ignore
-        board
+        // Locking the thread is not the best option here, but required until a clean 
+        // method of handling the on_ready event is located.
+        while not board.isReady do 
+            promise { do! Promise.sleep 500 } |> Promise.start
+        {
+            X = board |> activateAxis X
+            Y = board |> activateAxis Y
+            Vertical = board |> activateAxis Vertical
+            Tilt = board |> activateAxis StageAngle
+        } |> Connected
