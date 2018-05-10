@@ -9,6 +9,14 @@ open Types
 let patchProcessStdin : unit -> unit = import "patchProcessStdin" "./electron-patch.js"
 patchProcessStdin()
 
+module File =
+
+    let encodeBase64 imageUrl =
+        let data = Fable.Import.Node.Exports.fs.readFileSync imageUrl
+        let buffer = Fable.Import.Node.Globals.Buffer.Create data
+        "data:image/png;base64," + buffer.toString("base64")
+
+
 module Hardware =
 
     open Arduino
@@ -126,27 +134,12 @@ module Software =
     let calibrate state =
         state
 
-    let uploadImage image state =
-        Browser.console.log "file selected!" |> ignore
-        { state with Calibration = ImageOnly image }
+    let uploadImage imageUrl state =
+        let data = File.encodeBase64 imageUrl
+        { state with Calibration = ImageOnly data }
 
 
     let move axis steps state =
-      // match state.Micromill with
-      // | Connected mm ->
-      //     match axis with
-      //     | X ->
-      //       match mm.CartesianX with
-      //       | Disabled -> state
-      //       | Enabled ax -> 
-      //         let updated = { mm with CartesianX = Enabled { ax with CurrentStep = ax.CurrentStep + steps }}
-      //         {state with Micromill = Connected mm }
-      //     // | Y ->
-      //     //   match mm.CartesianY with
-      //     //   | Disabled -> model
-      //     //   | Enabled ax -> {model with CartesianY = Enabled { ax with CurrentStep = ax.CurrentStep + steps }}
-      //     | _ -> state
-      // | _ -> state
       state
 
     let update (msg:Msg) (state:Model)  =

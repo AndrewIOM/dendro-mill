@@ -1,31 +1,54 @@
 // Layout
+
+@import "../../node_modules/skeleton-css/css/normalize.css";
+@import "../../node_modules/skeleton-css/css/skeleton.css";
+
 body {
     font-family: Arial;
     margin: 0;
-} // Sidebar
+} 
+
+h1 {
+    font-size: 2.75em;
+}
+
+.container {
+    width: 100%;
+}
+
+// Sidebar
 #sidebar {
     position: absolute;
-    width: 155px;
+    text-align: center;
+    width: 5em;
     height: 100%;
     top: 0;
     background-color: $primary-color;
-    padding: 0 10px;
     nav {
+        a:hover,.active {
+            background-color: $primary-color-dark;
+        }
         a {
+            cursor: default;
             display: block;
-            color: white;
-            font-weight: bold;
+            color: $primary-color-text;
+            font-size: 0.8em;
             padding: 1em 0;
             img {
+                display: block;
+                margin: auto;
                 height: 1.5em;
+                margin-bottom: 0.3em;
             }
         }
     }
 }
 
 .main-section {
-    margin-left: 175px;
-    padding: 0em 1em;
+    margin-left: 4em;
+    padding: 4em 1em 0 3em;
+    position: absolute;
+    top: -3em
 }
 
 div.status-bar {
@@ -35,5 +58,6 @@ div.status-bar {
     bottom: 0;
     padding: 0.6em 1em 0em 1em;
     background-color: #E64A19;
+    font-size: 0.8em;
     color: $primary-color-text;
 }
