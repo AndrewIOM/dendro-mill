@@ -2,7 +2,6 @@ module ViewState
 
 open Elmish
 open Fable.Core.JsInterop
-open Fable.Import
 open Fable.PowerPack
 open Types
 
@@ -90,6 +89,8 @@ module Hardware =
 
 module Software =
 
+    type GridPoint = float<mm> * float<mm>
+
     [<Fable.Core.PojoAttribute>]
     type Model = {
         Calibration: Calibration
@@ -97,15 +98,12 @@ module Software =
 
     and Calibration = 
     | Uncalibrated
-    | ImageOnly of string //base64 or blob
-    | Calibrated of CalibrationState
+    | ImageCalibration of CalibrationState
 
     and CalibrationState = {
         Image: string
-        TopRight: Coordinate
-        TopLeft: Coordinate
-        BottomRight: Coordinate
-        BottomLeft: Coordinate }
+        ToCalibrate: GridPoint list
+        Calibrated: (GridPoint * Coordinate) list }
 
     and ViewSection =
     | Control
@@ -114,42 +112,35 @@ module Software =
     | Settings
 
     type Msg =
-    | ConnectArduino
-    | ActivateAxes
-    | UploadCalibrationImage of string
-    | Calibrate
     | SwitchSection of ViewSection
-    | Move of MovementDirection * int<step>
+    | UploadCalibrationImage of string
+    | AddCalibrationPoint of int * int
 
     let init () =
          { Calibration = Calibration.Uncalibrated
            Section = Control }, Cmd.none
 
-    let activateMotors state = 
-        state
-
-    let connect state =
-        state
-
-    let calibrate state =
-        state
-
     let uploadImage imageUrl state =
         let data = File.encodeBase64 imageUrl
-        { state with Calibration = ImageOnly data }
+        { state with Calibration = ImageCalibration { Image = data; Calibrated = []; ToCalibrate = Config.controlPoints } }
 
-
-    let move axis steps state =
-      state
+    let addCalibrationPoint (x:int) (y:int) (state:Model) =
+        match state.Calibration with
+        | Uncalibrated -> state
+        | ImageCalibration s -> 
+            if s.ToCalibrate.IsEmpty 
+            then state
+            else
+                { state with 
+                    Calibration = ImageCalibration { Image = s.Image; 
+                    Calibrated = (s.ToCalibrate.Head,(float x,float y)) :: s.Calibrated; 
+                    ToCalibrate = s.ToCalibrate.Tail }}
 
     let update (msg:Msg) (state:Model)  =
       match msg with
-      | ConnectArduino -> connect state, Cmd.none
-      | ActivateAxes -> activateMotors state, Cmd.none
-      | Msg.Calibrate -> calibrate state, Cmd.none
       | SwitchSection s -> { state with Section = s }, Cmd.none
-      | Move (axis,steps) -> move axis steps state, Cmd.none
       | UploadCalibrationImage imageDataUrl -> uploadImage imageDataUrl state, Cmd.none
+      | AddCalibrationPoint (x,y) -> state |> addCalibrationPoint x y, Cmd.none
 
 
 //////////////

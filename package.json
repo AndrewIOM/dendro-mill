@@ -33,6 +33,7 @@
     "fable-utils": "^1.0.6",
     "loglevel": "^1.6.1",
     "node-sass": "^4.9.0",
+    "numeric": "^1.2.6",
     "postcss-cssnext": "^3.1.0",
     "postcss-each": "^0.10.0",
     "postcss-import": "^11.1.0",
