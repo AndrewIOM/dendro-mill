@@ -89,7 +89,18 @@ module Hardware =
 
 module Software =
 
-    type GridPoint = float<mm> * float<mm>
+    [<AutoOpen>]
+    module MatrixTransform =
+        type MatrixTransform = private MatrixTransform of float array
+        let create arr =
+            match arr |> Array.length with
+            | 16 -> MatrixTransform arr
+            | _ -> invalidOp "Transform is invalid"
+
+        let private unwrap (MatrixTransform m) = m
+        type MatrixTransform with
+            member this.Value = 
+                unwrap this
 
     [<Fable.Core.PojoAttribute>]
     type Model = {
@@ -100,10 +111,9 @@ module Software =
     | Uncalibrated
     | ImageCalibration of CalibrationState
 
-    and CalibrationState = {
-        Image: string
-        ToCalibrate: GridPoint list
-        Calibrated: (GridPoint * Coordinate) list }
+    and CalibrationState =
+    | Floating of string
+    | Fixed of string * MatrixTransform // Transform matrix is relative to whole stage width and height
 
     and ViewSection =
     | Control
@@ -114,7 +124,7 @@ module Software =
     type Msg =
     | SwitchSection of ViewSection
     | UploadCalibrationImage of string
-    | AddCalibrationPoint of int * int
+    | SaveCalibrationPosition of MatrixTransform
 
     let init () =
          { Calibration = Calibration.Uncalibrated
@@ -122,25 +132,21 @@ module Software =
 
     let uploadImage imageUrl state =
         let data = File.encodeBase64 imageUrl
-        { state with Calibration = ImageCalibration { Image = data; Calibrated = []; ToCalibrate = Config.controlPoints } }
+        { state with Calibration = data |> Floating |> ImageCalibration }
 
-    let addCalibrationPoint (x:int) (y:int) (state:Model) =
+    let saveMatrix matrix state =
         match state.Calibration with
-        | Uncalibrated -> state
-        | ImageCalibration s -> 
-            if s.ToCalibrate.IsEmpty 
-            then state
-            else
-                { state with 
-                    Calibration = ImageCalibration { Image = s.Image; 
-                    Calibrated = (s.ToCalibrate.Head,(float x,float y)) :: s.Calibrated; 
-                    ToCalibrate = s.ToCalibrate.Tail }}
+        | Calibration.ImageCalibration s ->
+            match s with
+            | Floating i -> { state with Calibration = ImageCalibration <| Fixed (i,matrix) }
+            | Fixed (i,_) -> { state with Calibration = ImageCalibration <| Fixed (i,matrix) }
+        | _ -> state
 
     let update (msg:Msg) (state:Model)  =
       match msg with
       | SwitchSection s -> { state with Section = s }, Cmd.none
       | UploadCalibrationImage imageDataUrl -> uploadImage imageDataUrl state, Cmd.none
-      | AddCalibrationPoint (x,y) -> state |> addCalibrationPoint x y, Cmd.none
+      | SaveCalibrationPosition matrix -> saveMatrix matrix state, Cmd.none
 
 
 //////////////

@@ -1,14 +1,16 @@
-.transform-canvas {
-    position:relative;
+.visualisation-grid {
+    position: relative;
     svg {
         position: absolute;
         top: 0;
         left: 0;
-        .line {
-            stroke: #000;
-            stroke-opacity: .5;
-            stroke-width: 1px;
-            stroke-linecap: square;
+        .tick {
+            line {
+                stroke: grey;
+                stroke-opacity: .5;
+                stroke-width: 1px;
+                stroke-linecap: square;
+            }
         }
         .handle {
             fill: none;
@@ -29,6 +31,15 @@
         }
         button:focus {
             outline: none;
+        }
+    }
+    #transform-layer {
+        .line--x,
+        .line--y {
+            stroke: red;
+            stroke-opacity: .25;
+            stroke-width: 1px;
+            stroke-linecap: square;
         }
     }
 }
