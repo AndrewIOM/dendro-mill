@@ -48,7 +48,7 @@ module Layout =
 module Components =
 
     let card (title:string) content =
-        R.div [ Class "card" ] [
+        R.div [ Class "card card-secondary" ] [
             R.h3 [] [ unbox title ]
             content
         ]
@@ -97,6 +97,7 @@ module Pages =
                 .Split(',')
             |> Array.map float
             |> Software.MatrixTransform.create
+        printfn "%A" matrix
         matrix |> Software.SaveCalibrationPosition |> SoftwareMsg |> dispatch
 
     let calibrate dispatch model =
@@ -160,7 +161,7 @@ module Pages =
         ]
 
     let grid model : React.ReactElement =
-        let layout : Graphics.GraphElement.Layout = { Height = 300; Width = 300; Margin = { Top = 0; Bottom = 25; Left = 0; Right = 25 } }
+        let layout : Graphics.GraphElement.Layout = { Height = 400; Width = 400; Margin = { Top = 10; Bottom = 25; Left = 0; Right = 25 } }
         let imageBase64,matrix =
             match model.Software.Calibration with
             | Software.ImageCalibration s ->
@@ -174,20 +175,25 @@ module Pages =
         |> Graphics.Grid.withOverlay layout imageBase64 matrix
         |> Graphics.Grid.toReact
 
+    let verticalGraph : React.ReactElement =
+        let layout : Graphics.GraphElement.Layout = { Height = 200; Width = 200; Margin = {Top = 0; Left = 0; Right = 25; Bottom = 10 } }
+        Graphics.Vertical.complete layout 120. 12.21 12.<mm>
 
     let control (onClick:AppMsg->DOMAttr) (model:AppModel) =
         R.section [ Id "control-view"; ClassName "main-section" ] [
-          R.h1 [] [ unbox "Control" ]
-          R.hr []
-
-          Components.container [
-              Components.row [
-                  R.div [ Class "eight columns" ] [
-                      R.label [] [ unbox "Top View" ]
-                      R.ofFunction grid model []
-                    //   R.ofFunction Graphing.drawVerticalAxis model []
-                  ]
-                  R.div [ Class "four columns" ] [
+            Components.container [
+                Components.row [
+                    R.div [ Class "eight columns" ] [
+                        R.label [] [ R.str "Top View" ]
+                        R.ofFunction grid model [] 
+                    ]
+                    R.div [ Class "four columns" ] [
+                        R.label [] [ R.str "Vertical" ]
+                        verticalGraph
+                    ]
+                ]
+                Components.row [
+                    R.div [ Class "twelve columns" ] [
                         Components.card "Manual Controls" (R.div [] 
                             [
                                 R.button [ onClick <| HardwareMsg (Hardware.StartMoving (MovementDirection.Y,1.<mm>)) ] [ R.str "North" ]

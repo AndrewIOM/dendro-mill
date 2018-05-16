@@ -6,7 +6,6 @@ open Fable.Import
 open Fable.Import.JohnnyFive
 open Fable.PowerPack
 open Types
-open Fable.Import.JS
 
 [<Measure>] type pin
 

@@ -69,6 +69,8 @@ module Numeric =
 /// Custom Visualisations
 /////////////////////////
 
+let private removeMM (x:float<_>) = float x
+
 module Grid =
 
     open Types
@@ -82,12 +84,12 @@ module Grid =
         TransformLayer: D3.Selection<obj>
     }
 
-    let private removeMM (x:float<_>) = float x
-
     let create (layout:Layout) (dimension:float<mm>) =
     
         let container = createElement "div"
-        container.Element.attr("class", unbox<D3.Primitive> "visualisation-grid") |> ignore
+        container.Element.attr("class", unbox<D3.Primitive> "visualisation-grid")
+            .style("width", unbox<D3.Primitive> layout.Width) 
+            .style("height", unbox<D3.Primitive> layout.Height) |> ignore
 
         let grid = {
             X = D3.Scale.Globals
@@ -172,7 +174,6 @@ module Grid =
                 .append("image")
                 .attr("xlink:href", unbox<D3.Primitive> imageBase64 )
                 .attr("preserveAspectRatio", unbox<D3.Primitive> "none")
-                // .attr("transform", unbox<D3.Primitive> (sprintf "translate(%i,%i)" layout.Margin.Left layout.Margin.Top ))
                 .attr("opacity", unbox<D3.Primitive> 0.5)
                 .attr("width", unbox<D3.Primitive> (layout.Width - layout.Margin.Left - layout.Margin.Right))
                 .attr("height", unbox<D3.Primitive> (layout.Height - layout.Margin.Top - layout.Margin.Bottom)) |> ignore
@@ -184,7 +185,6 @@ module Grid =
                 ?enter()
                 ?append("line")
                 ?attr("class", "line line--x")
-                // ?attr("transform", unbox<D3.Primitive> (sprintf "translate(%i,%i)" layout.Margin.Left layout.Margin.Top ))
                 ?attr("x1", id)
                 ?attr("x2", id)
                 ?attr("y1", 0)
@@ -197,7 +197,6 @@ module Grid =
                 ?enter()
                 ?append("line")
                 ?attr("class", "line line--y")
-                // ?attr("transform", unbox<D3.Primitive> (sprintf "translate(%i,%i)" layout.Margin.Left layout.Margin.Top ))
                 ?attr("x1", 0)
                 ?attr("x2", layout.Width - layout.Margin.Left - layout.Margin.Right)
                 ?attr("y1", id)
@@ -207,14 +206,9 @@ module Grid =
             match transform with
             | None -> ()
             | Some x ->
-                let matrix = 
-                    [| x.[0]; x.[3]; 0.; x.[6]
-                       x.[1]; x.[4]; 0.; x.[7]
-                       0.;    0.;    1.; 0.
-                       x.[2]; x.[5]; 0.; 1. |] |> Array.map(fun i -> D3.Globals.round(i,6.))
-                let mString = (sprintf "matrix3d(%A)" matrix).Replace("[", "").Replace("]", "")
-                D3.Globals.select("#transform-layer").style("transform", unbox<D3.Primitive> mString) |> ignore
-
+                let mString = ("matrix3d(" + (x |> Array.rev |> Array.map (fun x -> x.ToString()) |> Array.fold(fun x s -> s + "," + x) "") + ")").Replace(",)", ")")
+                printfn "Applying matrix... %s" mString
+                grid.TransformLayer.style("transform", unbox<D3.Primitive> mString) |> ignore
             grid
 
     let withOverlayAdjustment layout grid =
@@ -233,7 +227,6 @@ module Grid =
 
         let sourcePoints = getBounds()
         let mutable targetPoints = getBounds()
-        printfn "Source %A" sourcePoints
 
         let moveHandle (x:float) (y:float) =
             match movingHandle with
@@ -243,12 +236,10 @@ module Grid =
                 let rect = svg.getBoundingClientRect()
                 let xFromOrigin = (float x - float rect.left) 
                 let yFromOrigin = (float y - rect.top)
-                printfn "%A %A" xFromOrigin yFromOrigin
                 D3.Globals.select(sprintf ".handle-%i" (int h))
                     .attr("transform", unbox<D3.Primitive> (sprintf "translate(%f,%f)" xFromOrigin yFromOrigin))
                     |> ignore
                 targetPoints.[int h] <- [| xFromOrigin ; yFromOrigin |]
-                printfn "%A %A" sourcePoints targetPoints
                 let x = Numeric.transform sourcePoints targetPoints
                 let matrix = 
                     [| x.[0]; x.[3]; 0.; x.[6]
@@ -256,6 +247,7 @@ module Grid =
                        0.;    0.;    1.; 0.
                        x.[2]; x.[5]; 0.; 1. |] |> Array.map(fun i -> D3.Globals.round(i,6.))
                 let mString = (sprintf "matrix3d(%A)" matrix).Replace("[", "").Replace("]", "")
+                printfn "Matrix: %s" mString
                 D3.Globals.select("#transform-layer").style("transform", unbox<D3.Primitive> mString) |> ignore
 
         // Grab behaviour for grab handles
@@ -285,11 +277,89 @@ module Grid =
         |> toReactElement    
 
 
-module Angle =
-
-    let create () = 2
-
-
 module Vertical =
 
-    let create () = 2
+    open GraphElement
+
+    type VerticalGraph = {
+        Container: GraphElement
+        Svg: D3.Selection<obj>
+        Axis: D3.Scale.Linear<float,float>
+    }
+
+    let create layout zLimit =
+        let parent = createElement "div"
+        let svg = parent |> appendSvg layout "vertical"
+        let z = D3.Scale.Globals.linear()
+                    .range([|layout.Margin.Top |> float; float (layout.Height - layout.Margin.Bottom)|]).domain([|0. ; zLimit |])
+
+        { Container = parent; Svg = svg; Axis = z }
+
+    let withPlatformAngle layout angle (g:VerticalGraph) =
+        let stage = g.Svg.append("g")
+                        .attr("class",unbox<D3.Primitive> "rotating-stage")
+                        .style("transform-origin", unbox<D3.Primitive> "bottom right")
+        let woodWidth, woodHeight = 50,10
+        stage.append("rect")
+            .attr("class", unbox<D3.Primitive> "woodblock")
+            .style("transform", unbox<D3.Primitive> (sprintf "translate(%ipx,%ipx)" (layout.Margin.Left + (woodWidth / 2)) (layout.Height - layout.Margin.Bottom - woodHeight)))
+            .attr("height", unbox<D3.Primitive> woodHeight)
+            .attr("width", unbox<D3.Primitive> <| (layout.Width - layout.Margin.Left - layout.Margin.Right) / 2) |> ignore
+        stage.append("line")
+            .attr("class", unbox<D3.Primitive> "stage")
+            .attr("x1", unbox<D3.Primitive> layout.Margin.Left)
+            .attr("x2", unbox<D3.Primitive> <| layout.Width - layout.Margin.Right)
+            .attr("y1", unbox<D3.Primitive> (layout.Height - layout.Margin.Bottom))
+            .attr("y2", unbox<D3.Primitive> (layout.Height - layout.Margin.Bottom)) |> ignore
+        stage.style("transform", unbox<D3.Primitive> (sprintf "rotate(%fdeg)" angle)) |> ignore
+        g
+
+    let withCurrentPosition (position:float) (g:VerticalGraph) =
+          g.Svg.append("circle")
+            .attr("r", unbox<D3.Primitive> 4)
+            ?attr("cx", unbox<D3.Primitive> 10)
+            ?attr("cy", unbox<D3.Primitive> (position |> float |> g.Axis.Invoke)) |> ignore
+
+    let withAxis layout (g:VerticalGraph) =
+        let zAxis = D3.Svg.Globals
+                        .axis()
+                        .scale(g.Axis)
+                        .orient("right")
+                        .tickSize(float (layout.Width - layout.Margin.Left - layout.Margin.Right))
+        g.Svg.append("g")
+          .attr("class", unbox<D3.Primitive> "z axis")
+          .attr("transform", unbox<D3.Primitive> ("translate(" + (layout.Margin.Left.ToString()) + ",0)"))
+          ?call(zAxis)
+          ?append("text")
+          ?attr("transform", "rotate(-90)")
+          ?attr("y", 6)
+          ?attr("dy", ".71em")
+          ?style("text-anchor", "end")
+          |> ignore
+        g
+
+    let withDrillHeight layout height (g:VerticalGraph) =
+        let currentHeight = g.Svg.append("g")
+        currentHeight.append("line")
+            .attr("class", unbox<D3.Primitive> "drill-height")
+            .attr("x1", unbox<D3.Primitive> layout.Margin.Left)
+            .attr("x2", unbox<D3.Primitive> <| layout.Width - layout.Margin.Right)
+            .attr("y1", unbox<D3.Primitive> (height |> removeMM |> g.Axis.Invoke))
+            .attr("y2", unbox<D3.Primitive> (height |> removeMM |> g.Axis.Invoke)) |> ignore
+        currentHeight.append("line")
+            .attr("class", unbox<D3.Primitive> "drill-vertical-alignment")
+            .attr("y1", unbox<D3.Primitive> layout.Margin.Top)
+            .attr("y2", unbox<D3.Primitive> <| layout.Height - layout.Margin.Bottom)
+            .attr("x1", unbox<D3.Primitive> <| layout.Margin.Left + (layout.Width - layout.Margin.Left - layout.Margin.Right) / 2 )
+            .attr("x2", unbox<D3.Primitive> <| layout.Margin.Left + (layout.Width - layout.Margin.Left - layout.Margin.Right) / 2 ) |> ignore
+        g
+
+    let toReact vert =
+        vert.Container |> toReactElement
+
+    let complete layout zLimit angle height =
+        create layout zLimit
+        |> withPlatformAngle layout angle
+        |> withAxis layout
+        |> withDrillHeight layout height
+        |> toReact

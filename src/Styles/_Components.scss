@@ -11,6 +11,12 @@
     }
 }
 
+.card-secondary {
+    border: 0.75px solid $accent-color;
+    background-color: $accent-color;
+    color: $primary-color-text;
+}
+
 // Drop zone for files
 .drop-zone {
     width: 100%;

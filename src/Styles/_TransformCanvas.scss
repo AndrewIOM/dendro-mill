@@ -1,4 +1,5 @@
 .visualisation-grid {
+    overflow: hidden;
     position: relative;
     svg {
         position: absolute;
@@ -15,7 +16,7 @@
         .handle {
             fill: none;
             pointer-events: all;
-            stroke: red;
+            stroke: $primary-color-dark;
             stroke-width: 2px;
             cursor: move;
         }
@@ -36,10 +37,36 @@
     #transform-layer {
         .line--x,
         .line--y {
-            stroke: red;
+            stroke: $primary-color-dark;
             stroke-opacity: .25;
             stroke-width: 1px;
             stroke-linecap: square;
         }
+    }
+}
+
+#vertical {
+    .rotating-stage {
+        transform-origin: bottom right;
+        .stage {
+            stroke: #000;
+        }
+        .woodblock {
+            fill: $primary-color;
+        }    
+    }
+    .axis {
+        fill: none;
+        line {
+            stroke: grey;
+            opacity: 0.5;
+        }
+        text {
+            fill: grey;
+        }
+    }
+    .drill-height, .drill-vertical-alignment {
+        stroke:$primary-color-dark;
+        stroke-dasharray: 5,5;
     }
 }
