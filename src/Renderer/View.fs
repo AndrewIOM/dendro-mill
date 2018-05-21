@@ -1,6 +1,5 @@
 module View
 
-open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Helpers.React.Props
 open Fable.Import
@@ -35,6 +34,21 @@ module Layout =
             ]
         ]
 
+    let statusDot (state:Hardware.MoveState) =
+        match state with
+            | Hardware.MoveState.Calibrating -> R.span [ Class "dot dot-calibrating" ] []
+            | Hardware.MoveState.Moving -> R.span [ Class "dot dot-moving" ] []
+            | Hardware.MoveState.Ready -> R.span [ Class "dot dot-ready" ] []
+
+    let calibrationStatusDots (model:AppModel) =
+        match model.Hardware with
+        | Hardware.Online s ->
+            [ statusDot (s.X |> fst)
+              statusDot (s.Y |> fst) 
+              statusDot (s.Vertical |> fst) 
+              statusDot (s.Tilt |> fst) ]
+        | _ -> []
+
     let statusBar (model:AppModel) =
         let statusText = 
             match model.Hardware with
@@ -42,7 +56,9 @@ module Layout =
             | Hardware.Model.Connecting -> "Status: Looking for Micromill..."
             | Hardware.Model.Online _ -> "Status: Micromill Online"
             | Hardware.Model.Offline error -> sprintf "Status: Micromill Offline (Error: %s)" error
-        R.div [ Class "status-bar" ] [ R.span [] [ unbox statusText ] ]
+        R.div [ Class "status-bar" ] [ 
+            R.div [ Class "status-left" ] [ R.span [] [ unbox statusText ] ]
+            R.div [ Class "status-right" ] (calibrationStatusDots model) ]
 
 
 module Components =
@@ -175,9 +191,11 @@ module Pages =
         |> Graphics.Grid.withOverlay layout imageBase64 matrix
         |> Graphics.Grid.toReact
 
-    let verticalGraph : React.ReactElement =
+    let verticalGraph model : React.ReactElement =
         let layout : Graphics.GraphElement.Layout = { Height = 200; Width = 200; Margin = {Top = 0; Left = 0; Right = 25; Bottom = 10 } }
-        Graphics.Vertical.complete layout 120. 12.21 12.<mm>
+        match model.Hardware with
+        | Hardware.Online s -> Graphics.Vertical.complete layout 120. (snd s.Tilt) 12.<mm>
+        | _ -> R.text [] [ R.str "Micromill not connected" ]
 
     let control (onClick:AppMsg->DOMAttr) (model:AppModel) =
         R.section [ Id "control-view"; ClassName "main-section" ] [
@@ -189,7 +207,7 @@ module Pages =
                     ]
                     R.div [ Class "four columns" ] [
                         R.label [] [ R.str "Vertical" ]
-                        verticalGraph
+                        verticalGraph model
                     ]
                 ]
                 Components.row [

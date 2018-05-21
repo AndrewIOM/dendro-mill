@@ -10,6 +10,9 @@ module Types
 [<Measure>] type micrometre
 [<Measure>] type rpm
 
+let removeUnit (x:int<_>) = int x
+let removeUnitFloat (x:float<_>) = float x
+
 type Coordinate = float * float
 
 type MovementDirection =
@@ -22,12 +25,18 @@ type MovementDirection =
 /// Representation of an axis on a moving stage
 module Axis =
 
-    type MoveMotor = int<step> -> (unit -> unit) -> unit
+    open Fable.Import.JS
 
     type CurrentStep =
     | Uncalibrated
     | Calibrated of int<step>
 
+    type MoveResult =
+    | HitLowerBound
+    | Finished
+
+    type MoveMotor = int<step> -> Promise<MoveResult>
+    
     type private AxisState = {
         Step: CurrentStep
         StepLimit: int<step>

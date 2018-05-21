@@ -3,6 +3,7 @@ module Graphics
 open Fable.Core
 open Fable.Core.JsInterop
 open Fable.Import
+open Types
 
 [<Import("event", from="d3")>]
 let currentEvent : React.MouseEvent = jsNative
@@ -156,8 +157,8 @@ module Grid =
         | ViewState.Hardware.Model.Online s ->
               grid.BaseLayer.append("circle")
                 ?attr("r", 4)
-                ?attr("cx", s.X |> float |> grid.X.Invoke)
-                ?attr("cy", s.Y |> float |> grid.Y.Invoke) |> ignore
+                ?attr("cx", s.X |> snd |> float |> grid.X.Invoke)
+                ?attr("cy", s.Y |> snd |> float |> grid.Y.Invoke) |> ignore
         | _ -> ()
         grid
 
@@ -295,7 +296,7 @@ module Vertical =
 
         { Container = parent; Svg = svg; Axis = z }
 
-    let withPlatformAngle layout angle (g:VerticalGraph) =
+    let withPlatformAngle layout (angle:float<degree>) (g:VerticalGraph) =
         let stage = g.Svg.append("g")
                         .attr("class",unbox<D3.Primitive> "rotating-stage")
                         .style("transform-origin", unbox<D3.Primitive> "bottom right")
@@ -311,7 +312,7 @@ module Vertical =
             .attr("x2", unbox<D3.Primitive> <| layout.Width - layout.Margin.Right)
             .attr("y1", unbox<D3.Primitive> (layout.Height - layout.Margin.Bottom))
             .attr("y2", unbox<D3.Primitive> (layout.Height - layout.Margin.Bottom)) |> ignore
-        stage.style("transform", unbox<D3.Primitive> (sprintf "rotate(%fdeg)" angle)) |> ignore
+        stage.style("transform", unbox<D3.Primitive> (sprintf "rotate(%fdeg)" (angle |> removeUnitFloat))) |> ignore
         g
 
     let withCurrentPosition (position:float) (g:VerticalGraph) =

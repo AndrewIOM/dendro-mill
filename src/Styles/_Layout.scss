@@ -1,12 +1,10 @@
 // Layout
-
 @import "../../node_modules/skeleton-css/css/normalize.css";
 @import "../../node_modules/skeleton-css/css/skeleton.css";
-
 body {
     font-family: Arial;
     margin: 0;
-} 
+}
 
 h1 {
     font-size: 2.75em;
@@ -25,7 +23,8 @@ h1 {
     top: 0;
     background-color: $primary-color;
     nav {
-        a:hover,.active {
+        a:hover,
+        .active {
             background-color: $primary-color-dark;
         }
         a {
@@ -60,4 +59,10 @@ div.status-bar {
     background-color: #E64A19;
     font-size: 0.8em;
     color: $primary-color-text;
+    .status-left {
+        float: left;
+    }
+    .status-right {
+        float: right;
+    }
 }

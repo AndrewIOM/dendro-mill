@@ -18,7 +18,7 @@ module File =
 
 module Hardware =
 
-    open Arduino
+    open MovingStage
     open Movement
 
     let mutable movingStage = MovingStage.Status.Disconnected
@@ -27,8 +27,14 @@ module Hardware =
     | EstablishConnection
     | ConnectionEstablished
     | ConnectionError
+    | CalibratedAxis of MovementDirection
     | StartMoving of MovementDirection * float<mm>
     | FinishedMoving of MovementDirection * float<mm>
+
+    type MoveState =
+    | Ready
+    | Calibrating
+    | Moving
 
     [<Fable.Core.PojoAttribute>]
     type Model = 
@@ -38,10 +44,10 @@ module Hardware =
     | Offline of string
 
     and ModelState = {
-        X: float<mm>
-        Y: float<mm>
-        Vertical: float<mm>
-        Tilt: float<degree>
+        X: MoveState * float<mm>
+        Y: MoveState * float<mm>
+        Vertical: MoveState * float<mm>
+        Tilt: MoveState * float<degree>
     }
 
     let connectArduino (dispatch:Dispatch<Msg>) =
@@ -50,24 +56,80 @@ module Hardware =
             movingStage <- s
             dispatch ConnectionEstablished
         promise {
-            let! stage = MovingStage.connect()
+            let! stage = FakeStage.connect()
             success stage |> ignore
         } |> Promise.start
 
-    let connected =
-        Online { X = 0.<mm>; Y = 0.<mm>; Vertical = 0.<mm>; Tilt = 0.<degree> }
+    let rec moveToLowerLimit (move:Axis.MoveMotor) =
+        move 50<step>
+        |> Promise.bind (fun s ->
+            match s with
+            | Axis.MoveResult.Finished -> moveToLowerLimit move
+            | Axis.MoveResult.HitLowerBound -> promise { return () } )
 
-    let beginMove steps (dispatch:Dispatch<Msg>) =
-        let callback = fun () -> dispatch (FinishedMoving (MovementDirection.X, 100.<mm>))
-        match movingStage with
-        | MovingStage.Connected s -> (s.X |> Axis.move) steps callback
-        | _ -> ()
+    let calibrateAxis direction (dispatch:Dispatch<Msg>) =
+        promise {
+            match movingStage with
+            | Status.Connected s ->
+                match direction with
+                | MovementDirection.X -> do! s.X |> Axis.move |> moveToLowerLimit
+                | MovementDirection.Y -> do! s.Y |> Axis.move |> moveToLowerLimit
+                | MovementDirection.Vertical -> do! s.Vertical |> Axis.move |> moveToLowerLimit
+                | _ -> ()
+            | _ -> ()
+            dispatch <| CalibratedAxis direction
+        } |> Promise.start
 
-    let endMove direction distance model =
+    let calibrated direction model =
         match model with
         | Online s ->
             match direction with
-            | X -> Online { s with X = s.X + distance }
+            | MovementDirection.X -> Online { s with X = Ready, 0.<mm> }
+            | MovementDirection.Y -> Online { s with Y = Ready, 0.<mm> }
+            | MovementDirection.Vertical -> Online { s with Vertical = Ready, 0.<mm> }
+            | _ -> model
+        | _ -> model
+
+    let connected =
+        Online { X = Calibrating, 0.<mm>; Y = Calibrating, 0.<mm>; Vertical = Calibrating, 0.<mm>; Tilt = Ready, 0.<degree> },
+        Cmd.batch [
+            Cmd.ofSub (calibrateAxis MovementDirection.X)
+            Cmd.ofSub (calibrateAxis MovementDirection.Y)
+            Cmd.ofSub (calibrateAxis MovementDirection.Vertical) ]
+
+    let beginMove direction distance (dispatch:Dispatch<Msg>) =
+        let steps = 50<step>
+        let callback = fun () -> dispatch (FinishedMoving (MovementDirection.X, 100.<mm>))
+        match movingStage with
+        | MovingStage.Connected s ->
+            promise {
+                let! result = Axis.move s.X steps
+                match result with
+                | Axis.MoveResult.Finished -> FinishedMoving (direction,distance) |> dispatch
+                | Axis.MoveResult.HitLowerBound -> invalidOp "Not implemented"
+            } |> Promise.start
+        | _ -> ()
+
+    let startMove direction model =
+        printfn "Started moving"
+        match model with
+        | Online s ->
+            match direction with
+            | X -> Online { s with X = Moving, snd s.X }
+            | Y -> Online { s with Y = Moving, snd s.Y }
+            | Vertical -> Online { s with Vertical = Moving, snd s.Vertical }
+            | _ -> model
+        | _ -> model
+
+
+    let endMove direction distance model =
+        printfn "Finished moving"
+        match model with
+        | Online s ->
+            match direction with
+            | X -> Online { s with X = Ready, snd s.X + distance }
+            | Y -> Online { s with Y = Ready, snd s.Y + distance }
+            | Vertical -> Online { s with Vertical = Ready, snd s.Vertical + distance }
             | _ -> model
         | _ -> model
 
@@ -76,15 +138,12 @@ module Hardware =
 
     let update msg model =
         match msg with
-        | EstablishConnection -> 
-            Connecting, Cmd.ofSub connectArduino
-        | ConnectionEstablished ->
-            connected, Cmd.none
-        | StartMoving (direction,distance) ->
-            model, Cmd.ofSub (beginMove 100<step>)
-        | FinishedMoving (direction,distance) ->
-            model |> endMove direction distance, Cmd.none
-        | _ -> model, Cmd.none
+        | EstablishConnection -> Connecting, Cmd.ofSub connectArduino
+        | ConnectionEstablished -> connected
+        | StartMoving (direction,distance) -> startMove direction model, Cmd.ofSub (beginMove direction distance)
+        | FinishedMoving (direction,distance) -> endMove direction distance model, Cmd.none
+        | CalibratedAxis direction -> model |> calibrated direction, Cmd.none
+        | ConnectionError -> model, Cmd.none
 
 
 module Software =
