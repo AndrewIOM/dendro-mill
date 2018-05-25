@@ -1,6 +1,7 @@
   // Cartesian Grid
   svg {
     font: 10px sans-serif;
+    user-select: none;
   }
   
   path.line {
@@ -14,6 +15,9 @@
   }
   
   .x.axis {
+    text {
+      pointer-events: none;
+    }
     line {
       stroke: black;
       stroke-width: 0.2px;
@@ -32,4 +36,17 @@
   .y.axis path {
     fill: none;
     stroke: #000;
+  }
+
+  .movement-path {
+    stroke: white;
+    fill: none;
+  }
+
+  .path-creating {
+    stroke-dasharray: 5px;
+  }
+
+  .path-queued {
+    stroke: $primary-color;
   }

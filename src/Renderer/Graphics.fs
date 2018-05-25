@@ -74,7 +74,6 @@ let private removeMM (x:float<_>) = float x
 
 module Grid =
 
-    open Types
     open GraphElement
 
     type Grid = {
@@ -82,8 +81,13 @@ module Grid =
         X: D3.Scale.Linear<float,float>
         Y: D3.Scale.Linear<float,float>
         BaseLayer: D3.Selection<obj>
+        OverlayLayer: D3.Selection<obj>
         TransformLayer: D3.Selection<obj>
     }
+
+    type LayerDisplayMode =
+    | Static
+    | Transformable
 
     let create (layout:Layout) (dimension:float<mm>) =
     
@@ -101,6 +105,7 @@ module Grid =
                     .range([|float (layout.Height - layout.Margin.Bottom); float layout.Margin.Top |]).domain([|0.; dimension |> removeMM|])
             Container = container
             TransformLayer = (container |> appendSvg layout "transform-layer")
+            OverlayLayer = container |> appendSvg layout "overlay-layer"
             BaseLayer = container |> appendSvg layout "base-layer" }
 
         let xAxis = D3.Svg.Globals
@@ -138,7 +143,7 @@ module Grid =
         // Container for further items (transformed..)
         let appendable = 
             grid.BaseLayer.append("g")
-                .attr("class", unbox<D3.Primitive> "elements")
+                .attr("id", unbox<D3.Primitive> "elements")
                 .attr("transform", unbox<D3.Primitive> ("translate(" + (layout.Margin.Left.ToString()) + ",0)"))
         { grid with BaseLayer = appendable }
 
@@ -162,16 +167,21 @@ module Grid =
         | _ -> ()
         grid
 
-    let withOverlay layout (imageBase64:string) (transform:float[] option) grid =
+    let withImageLayer layout (imageBase64:string) (transform:float[] option) mode grid =
         match imageBase64.Length with
         | 0 -> grid
         | _ ->
-            grid.TransformLayer
+            let layer =
+                match mode with
+                | Transformable -> grid.TransformLayer
+                | Static -> grid.OverlayLayer
+
+            layer
                 .style("transform-origin", unbox<D3.Primitive> (sprintf "%ipx %ipx 0" layout.Margin.Left layout.Margin.Top))
                 |> ignore
 
             // Attach currently selected image
-            grid.TransformLayer
+            layer
                 .append("image")
                 .attr("xlink:href", unbox<D3.Primitive> imageBase64 )
                 .attr("preserveAspectRatio", unbox<D3.Primitive> "none")
@@ -180,7 +190,7 @@ module Grid =
                 .attr("height", unbox<D3.Primitive> (layout.Height - layout.Margin.Top - layout.Margin.Bottom)) |> ignore
 
             // Grid lines (x axis)
-            grid.TransformLayer
+            layer
                 .selectAll(".line--x")
                 .data(D3.Globals.range(0., (float <| layout.Width - layout.Margin.Right - layout.Margin.Left) + 1., (float <| layout.Width - layout.Margin.Right - layout.Margin.Left) / 4.))
                 ?enter()
@@ -192,7 +202,7 @@ module Grid =
                 ?attr("y2", layout.Height - layout.Margin.Bottom - layout.Margin.Top) |> ignore
 
             // Grid lines (y axis)
-            grid.TransformLayer
+            layer
                 .selectAll(".line--y")
                 .data(D3.Globals.range(0., (float <| layout.Height - layout.Margin.Bottom - layout.Margin.Top) + 1., (float <| layout.Height - layout.Margin.Bottom - layout.Margin.Top) / 4.))
                 ?enter()
@@ -208,11 +218,10 @@ module Grid =
             | None -> ()
             | Some x ->
                 let mString = ("matrix3d(" + (x |> Array.rev |> Array.map (fun x -> x.ToString()) |> Array.fold(fun x s -> s + "," + x) "") + ")").Replace(",)", ")")
-                printfn "Applying matrix... %s" mString
-                grid.TransformLayer.style("transform", unbox<D3.Primitive> mString) |> ignore
+                layer.style("transform", unbox<D3.Primitive> mString) |> ignore
             grid
 
-    let withOverlayAdjustment layout grid =
+    let withTransformHandles layout grid =
 
         let mutable movingHandle : int option = None
 
@@ -248,7 +257,6 @@ module Grid =
                        0.;    0.;    1.; 0.
                        x.[2]; x.[5]; 0.; 1. |] |> Array.map(fun i -> D3.Globals.round(i,6.))
                 let mString = (sprintf "matrix3d(%A)" matrix).Replace("[", "").Replace("]", "")
-                printfn "Matrix: %s" mString
                 D3.Globals.select("#transform-layer").style("transform", unbox<D3.Primitive> mString) |> ignore
 
         // Grab behaviour for grab handles
@@ -271,6 +279,73 @@ module Grid =
             ?on("mousedown", fun _ (i:float) -> movingHandle <- Some (int i))
             |> ignore
             // NB: Using d3.drag() doesn't work, as the event always has x and y as NaN.
+        grid
+
+    let withTransform layout (imageBase64:string) (transform:float[] option) grid =
+        grid
+        |> withImageLayer layout imageBase64 transform Transformable
+        |> withTransformHandles layout
+
+    let withStaticOverlay layout (imageBase64:string) (transform:float[] option) grid =
+        grid |> withImageLayer layout imageBase64 transform Static
+
+    let withDrawTool grid =
+
+        let mutable drawingLine : D3.Selection<obj> option  = None
+        let mutable linePoints : (float*float) array = [||] // Saved in mm * mm space
+
+        let lineGenerator = D3.Svg.Globals.line()
+                                .interpolate_basis()
+
+        let relativeMousePosition x y =
+            let svg = Browser.document.getElementById("base-layer")
+            let rect = svg.getBoundingClientRect()
+            let dx = (float x - float rect.left) 
+            let dy = (float y - rect.top)
+            dx,dy
+
+        let restartLine () =
+            D3.Globals.select(".path-creating").remove() |> ignore
+            linePoints <- [||]
+
+        let startLine x y =
+            let x0,y0 = relativeMousePosition x y
+            restartLine()
+            drawingLine <- D3.Globals.select("#elements")
+                                .append("path")
+                                .attr("id", unbox<D3.Primitive> "path-creating")
+                                .attr("class", unbox<D3.Primitive> "movement-path path-creating") |> Some
+            linePoints <- linePoints |> Array.append [|(x0,y0)|]
+
+        let moveMouse (x:float) (y:float) =
+            match drawingLine with
+            | None -> ()
+            | Some active ->
+                let dx,dy = relativeMousePosition x y
+                if (dx * dx + dy * dy > 100.)
+                then linePoints <- Array.append [|(dx,dy)|] linePoints
+                else linePoints <- Array.append [|(dx,dy)|] linePoints
+                let path = lineGenerator.Invoke linePoints
+                active.attr("data-points", unbox<D3.Primitive> linePoints) |> ignore
+                active.attr("d", unbox<D3.Primitive> path) |> ignore
+
+        grid.Container.Element
+            ?on("mousemove", fun _ -> moveMouse currentEvent.clientX currentEvent.clientY)
+            ?on("mousedown", fun _ -> startLine currentEvent.clientX currentEvent.clientY)
+            ?on("mouseup", fun _ -> drawingLine <- None)
+            |> ignore
+        grid
+
+    let withExistingPaths (queue:ViewState.Software.PathQueue) (grid:Grid) =
+        let lineGenerator = D3.Svg.Globals.line().interpolate_basis()
+        grid.BaseLayer
+            .selectAll(".path-queued")
+            ?data(queue.Queued |> List.toArray)
+            ?enter()
+            ?append("path")
+            ?attr("class", unbox<D3.Primitive> "movement-path path-queued")
+            ?attr("d", fst >> List.toArray >> lineGenerator.Invoke)
+             |> ignore
         grid
 
     let toReact grid =

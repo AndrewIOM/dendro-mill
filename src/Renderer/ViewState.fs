@@ -164,13 +164,25 @@ module Software =
     [<Fable.Core.PojoAttribute>]
     type Model = {
         Calibration: Calibration
+        PathTemplate: ImageState option
+        Paths: PathQueue
+        EditingPathName: Label
         Section: ViewSection }
+
+    and Label = string
+    and Path = Coordinate list * Label
+
+    and PathQueue = {
+        Queued: Path list
+        InProgress: Path option
+        Completed: Path list
+    }
 
     and Calibration = 
     | Uncalibrated
-    | ImageCalibration of CalibrationState
+    | ImageCalibration of ImageState
 
-    and CalibrationState =
+    and ImageState =
     | Floating of string
     | Fixed of string * MatrixTransform // Transform matrix is relative to whole stage width and height
 
@@ -184,14 +196,25 @@ module Software =
     | SwitchSection of ViewSection
     | UploadCalibrationImage of string
     | SaveCalibrationPosition of MatrixTransform
+    | UploadPathImage of string
+    | QueuePath of Coordinate list
+    | UnQueuePath of Label
+    | ChangePathName of Label
 
     let init () =
          { Calibration = Calibration.Uncalibrated
+           PathTemplate = None
+           Paths = { Queued = []; InProgress = None; Completed = [] }
+           EditingPathName = ""
            Section = Control }, Cmd.none
 
     let uploadImage imageUrl state =
         let data = File.encodeBase64 imageUrl
         { state with Calibration = data |> Floating |> ImageCalibration }
+
+    let uploadPathImage imageUrl state =
+        let data = File.encodeBase64 imageUrl
+        { state with PathTemplate = data |> Floating |> Some }
 
     let saveMatrix matrix state =
         match state.Calibration with
@@ -201,11 +224,20 @@ module Software =
             | Fixed (i,_) -> { state with Calibration = ImageCalibration <| Fixed (i,matrix) }
         | _ -> state
 
+    let queuePath path state =
+        if not <| System.String.IsNullOrEmpty state.EditingPathName 
+        then { state with Paths = { state.Paths with Queued = (path,state.EditingPathName) :: state.Paths.Queued } }
+        else state
+
     let update (msg:Msg) (state:Model)  =
       match msg with
       | SwitchSection s -> { state with Section = s }, Cmd.none
       | UploadCalibrationImage imageDataUrl -> uploadImage imageDataUrl state, Cmd.none
       | SaveCalibrationPosition matrix -> saveMatrix matrix state, Cmd.none
+      | UploadPathImage imageDataUrl -> uploadPathImage imageDataUrl state, Cmd.none
+      | QueuePath path -> queuePath path state, Cmd.none
+      | UnQueuePath label -> state, Cmd.none
+      | ChangePathName label -> { state with EditingPathName = label }, Cmd.none
 
 
 //////////////

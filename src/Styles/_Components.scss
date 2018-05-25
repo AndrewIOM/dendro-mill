@@ -30,6 +30,13 @@
     }
 }
 
+.slim {
+    height: 5em;
+    img {
+        max-height: 5em;
+    }
+}
+
 // Dots
 .dot {
     height: 15px;

@@ -75,6 +75,30 @@ module Components =
     let row content =
         R.div [ Class "row" ] content
 
+    let dropZone slim dispatch =
+        R.div [ 
+            Class (if slim then "drop-zone slim" else "drop-zone")
+            OnDrop(fun e -> 
+                e.preventDefault() 
+                e.stopPropagation()
+                if e.dataTransfer.files.length = 1. then 
+                    ((e.dataTransfer.files.item 0.)?path.ToString())
+                    |> dispatch )
+            OnDragOver(fun e ->
+                e.preventDefault()
+                e.stopPropagation() )
+        ]
+
+    let pathQueue (queue:Software.PathQueue) =
+        let active =
+            match queue.InProgress with
+            | Some p -> R.li [ Class "active" ] [ R.str (snd p) ]
+            | None -> R.li [] []
+
+        R.div [ Class "card" ] [
+            R.ul [] (active :: (queue.Queued |> List.map (fun p -> R.li [] [ R.str (snd p) ]) ))
+        ]
+
 module Pages =
 
     let settings onClick model =
@@ -94,11 +118,6 @@ module Pages =
           ]
         ]
 
-    let paths model =
-        R.section [ Id "paths-view"; ClassName "main-section" ] [
-          R.h1 [] [ unbox "Paths View" ]
-        ]
-
     let castToInt (o:obj) =
         match o with
         | :? int as e -> e
@@ -116,23 +135,21 @@ module Pages =
         printfn "%A" matrix
         matrix |> Software.SaveCalibrationPosition |> SoftwareMsg |> dispatch
 
+    let calibrateGrid model : React.ReactElement =
+        let layout : Graphics.GraphElement.Layout = { Height = 300; Width = 300; Margin = { Top = 0; Bottom = 25; Left = 0; Right = 25 } }
+        let imageBase64,matrix =
+            match model.Software.Calibration with
+            | Software.ImageCalibration s ->
+                match s with 
+                | Software.ImageState.Fixed (i,m) -> i, Some m.Value
+                | Software.ImageState.Floating i -> i, None
+            | _ -> "", None
+        Graphics.Grid.create layout 215.<mm>
+        |> Graphics.Grid.withControlPoints Config.controlPoints
+        |> Graphics.Grid.withTransform layout imageBase64 matrix
+        |> Graphics.Grid.toReact
+
     let calibrate dispatch model =
-
-        let calibrateGrid model : React.ReactElement =
-            let layout : Graphics.GraphElement.Layout = { Height = 300; Width = 300; Margin = { Top = 0; Bottom = 25; Left = 0; Right = 25 } }
-            let imageBase64,matrix =
-                match model.Software.Calibration with
-                | Software.ImageCalibration s ->
-                    match s with 
-                    | Software.CalibrationState.Fixed (i,m) -> i, Some m.Value
-                    | Software.CalibrationState.Floating i -> i, None
-                | _ -> "", None
-            Graphics.Grid.create layout 215.<mm>
-            |> Graphics.Grid.withControlPoints Config.controlPoints
-            |> Graphics.Grid.withOverlay layout imageBase64 matrix
-            |> Graphics.Grid.withOverlayAdjustment layout
-            |> Graphics.Grid.toReact
-
         R.section [ Id "calibrate-view"; ClassName "main-section" ] [
             R.h1 [] [ unbox "Calibrate" ]
             R.hr []
@@ -140,55 +157,103 @@ module Pages =
             Components.container [
                 Components.row [
                     R.div [ Class "six columns" ] [
-                        R.div [ 
-                            Class "drop-zone" 
-                            OnDrop(fun e -> 
-                                e.preventDefault() 
-                                e.stopPropagation()
-                                if e.dataTransfer.files.length = 1. then 
-                                    ((e.dataTransfer.files.item 0.)?path.ToString())
-                                    |> Software.UploadCalibrationImage
-                                    |> SoftwareMsg
-                                    |> dispatch )
-                            OnDragOver(fun e ->
-                                e.preventDefault()
-                                e.stopPropagation() )
-                        ] [ (
-                            match model.Software.Calibration with
+                        Components.dropZone false (Software.UploadCalibrationImage >> SoftwareMsg >> dispatch) [ 
+                            ( match model.Software.Calibration with
                             | Software.Calibration.Uncalibrated -> unbox "Drop file here" 
                             | Software.Calibration.ImageCalibration s -> 
                                 match s with
-                                | Software.CalibrationState.Floating i
-                                | Software.CalibrationState.Fixed (i,_) -> R.img [ Src i ] ) ]
+                                | Software.ImageState.Floating i
+                                | Software.ImageState.Fixed (i,_) -> R.img [ Src i ] ) ] 
                     ]
                     R.div [ Class "six columns" ] ( 
                         match model.Software.Calibration with
                         | Software.Calibration.Uncalibrated -> [ R.p [] [ unbox "Add an image to continue" ] ]
                         | Software.Calibration.ImageCalibration s ->
                             match s with
-                            | Software.CalibrationState.Floating i
-                            | Software.CalibrationState.Fixed (i,_) -> 
+                            | Software.ImageState.Floating i
+                            | Software.ImageState.Fixed (i,_) -> 
                                 [ R.button [ OnClick <| getMatrix dispatch ] [ R.str "Save Base Layer Position" ]
-                                  //Transform.create i ]
                                   calibrateGrid model ]
                     )
                 ]
             ]
         ]
 
+    let pathGrid model : React.ReactElement =
+        let layout : Graphics.GraphElement.Layout = { Height = 550; Width = 550; Margin = { Top = 10; Bottom = 25; Left = 0; Right = 25 } }
+        let calibrationBase64,calibrationMatrix =
+            match model.Software.Calibration with
+            | Software.ImageCalibration s ->
+                match s with 
+                | Software.ImageState.Fixed (i,m) -> i, Some m.Value
+                | Software.ImageState.Floating i -> i, None
+            | _ -> "", None
+        let templateBase64,templateMatrix =
+            match model.Software.PathTemplate with
+            | Some s ->
+                match s with 
+                | Software.ImageState.Fixed (i,m) -> i, Some m.Value
+                | Software.ImageState.Floating i -> i, None
+            | None -> "", None
+        Graphics.Grid.create layout 215.<mm>
+        |> Graphics.Grid.withStaticOverlay layout calibrationBase64 calibrationMatrix
+        |> Graphics.Grid.withTransform layout templateBase64 templateMatrix
+        |> Graphics.Grid.withDrawTool
+        |> Graphics.Grid.withExistingPaths model.Software.Paths
+        |> Graphics.Grid.toReact
+
+    let savePath dispatch =
+        let currentPathElement = Browser.document.getElementById "path-creating"
+        if not (isNull currentPathElement) then
+            let path = (currentPathElement.getAttribute "data-points").Split(',')
+            let path2 = seq { for i in 0 .. 2 .. path.Length - 2 -> (float path.[i], float path.[i+1]) } |> Seq.toArray
+            path2 |> Array.toList |> Software.QueuePath |> SoftwareMsg |> dispatch
+
+    let paths dispatch model =
+        R.section [ Id "paths-view"; ClassName "main-section" ] [
+          R.h1 [] [ unbox "Paths" ]
+          R.p [] [ R.str "Create paths for the drill to follow. You can use custom template overlays, for example wood anatomy slide scans." ]
+          R.hr []
+          Components.container [
+              Components.row [
+                    R.div [ Class "eight columns" ] [
+                        pathGrid model
+                    ]
+                    R.div [ Class "four columns" ] [
+                        R.label [] [ R.str "Use a Template" ]
+                        Components.dropZone true (Software.UploadPathImage >> SoftwareMsg >> dispatch) [ 
+                            ( match model.Software.PathTemplate with
+                              | None -> R.str "Drop an image here" 
+                              | Some s -> 
+                                match s with
+                                | Software.ImageState.Floating i
+                                | Software.ImageState.Fixed (i,_) -> R.img [ Src i ] ) ]
+                        R.hr []
+                        R.label [] [ R.str "Current Path Name" ]
+                        R.input [ Value model.Software.EditingPathName
+                                  OnChange (fun e -> e.target?value |> string |> Software.Msg.ChangePathName |> SoftwareMsg |> dispatch  ) ] 
+                        R.button [ OnClick (fun _ -> savePath dispatch ) ] [ R.str "Save Path" ]
+                        R.label [] [ R.str "Saved Paths:" ]
+                        Components.pathQueue model.Software.Paths
+                    ]
+                ]
+            ]
+        ]
+
     let grid model : React.ReactElement =
-        let layout : Graphics.GraphElement.Layout = { Height = 400; Width = 400; Margin = { Top = 10; Bottom = 25; Left = 0; Right = 25 } }
+        let layout : Graphics.GraphElement.Layout = { Height = 550; Width = 550; Margin = { Top = 10; Bottom = 25; Left = 0; Right = 25 } }
         let imageBase64,matrix =
             match model.Software.Calibration with
             | Software.ImageCalibration s ->
                 match s with 
-                | Software.CalibrationState.Fixed (i,m) -> i, Some m.Value
-                | Software.CalibrationState.Floating i -> i, None
+                | Software.ImageState.Fixed (i,m) -> i, Some m.Value
+                | Software.ImageState.Floating i -> i, None
             | _ -> "", None
         Graphics.Grid.create layout 215.<mm>
         |> Graphics.Grid.withControlPoints Config.controlPoints
         |> Graphics.Grid.withCurrentPosition model
-        |> Graphics.Grid.withOverlay layout imageBase64 matrix
+        |> Graphics.Grid.withStaticOverlay layout imageBase64 matrix
+        |> Graphics.Grid.withExistingPaths model.Software.Paths
         |> Graphics.Grid.toReact
 
     let verticalGraph model : React.ReactElement =
@@ -208,6 +273,8 @@ module Pages =
                     R.div [ Class "four columns" ] [
                         R.label [] [ R.str "Vertical" ]
                         verticalGraph model
+                        R.label [] [ R.str "Path Queue" ]
+                        Components.pathQueue model.Software.Paths
                     ]
                 ]
                 Components.row [
@@ -237,7 +304,7 @@ let master (model:AppModel) dispatch =
         match model.Software.Section with
         | Software.ViewSection.Calibrate -> Pages.calibrate dispatch
         | Software.ViewSection.Control -> Pages.control onClick
-        | Software.ViewSection.Paths -> Pages.paths
+        | Software.ViewSection.Paths -> Pages.paths dispatch
         | Software.ViewSection.Settings -> Pages.settings onClick
 
     R.div [] [
